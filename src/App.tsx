@@ -95,7 +95,9 @@ export default function App() {
           : action === "stop"
           ? await api.serviceStop()
           : await api.serviceRestart();
-      notify(r.output || `espanso ${action}`, r.success ? "ok" : "err");
+      const actionLabel =
+        action === "start" ? "gestartet" : action === "stop" ? "gestoppt" : "neu gestartet";
+      notify(r.output || `Engine ${actionLabel}`, r.success ? "ok" : "err");
     } catch (e: any) {
       notify(String(e), "err");
     } finally {
@@ -177,7 +179,7 @@ export default function App() {
           Snippet<span>Aff</span>
           <span className="glow-orange">AI</span>rs
         </div>
-        <div className="brand-sub">espanso · KI AffAIrs</div>
+        <div className="brand-sub">Text-Expander · KI AffAIrs</div>
 
         <div className="nav-section-label">Match-Dateien</div>
         <div
@@ -220,12 +222,12 @@ export default function App() {
         <div className="sidebar-foot">
           {info?.installed ? (
             <>
-              espanso <span className="ver">v{info.version ?? "?"}</span>
+              Engine <span className="ver">v{info.version ?? "?"}</span>
               <br />
               {info.config_path}
             </>
           ) : (
-            "espanso nicht gefunden"
+            "Engine nicht gefunden"
           )}
         </div>
       </aside>
@@ -239,8 +241,8 @@ export default function App() {
             }`}
           />
           <span className="status-text">
-            espanso:{" "}
-            <b>{running === true ? "läuft" : running === false ? "gestoppt" : "?"}</b>
+            Snippets:{" "}
+            <b>{running === true ? "aktiv" : running === false ? "inaktiv" : "?"}</b>
           </span>
           <div className="spacer" />
           <button className="btn btn-sm" disabled={svcBusy} onClick={() => svc("start")}>
@@ -267,9 +269,9 @@ export default function App() {
         <div className="content">
           {espansoMissing && (
             <div className="banner">
-              <b>espanso ist nicht installiert.</b> Diese App ist die Oberfläche dazu.
-              Installiere espanso zuerst — macOS: <code>brew install --cask espanso</code>,
-              dann in dieser Leiste auf <b>Start</b>.
+              <b>Die Text-Expander-Engine ist nicht installiert.</b> SnippetAffAIrs setzt auf
+              die freie Engine <b>espanso</b> auf — einmalig installieren, macOS:{" "}
+              <code>brew install --cask espanso</code>. Danach in dieser Leiste auf <b>Start</b>.
             </div>
           )}
 
