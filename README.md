@@ -75,8 +75,23 @@ und verwaltest.
 <details>
 <summary>🍎 <b>macOS meldet „nicht verifiziert / kann nicht geöffnet werden"?</b> (einmalig)</summary>
 
-Das ist normal bei kostenlosen Apps ohne teures Apple-Zertifikat. So öffnest du sie trotzdem:
-**Rechtsklick auf die App → „Öffnen" → im Dialog nochmal „Öffnen".** Danach startet sie immer normal.
+Das ist normal bei Apps, die (noch) nicht von Apple signiert sind — kein Fehler, kein Risiko.
+So startest du sie trotzdem, je nach macOS-Version:
+
+- **macOS 14 und älter:** **Rechtsklick auf die App → „Öffnen" → im Dialog nochmal „Öffnen".**
+- **macOS 15 (Sequoia) und neuer:** App einmal per Doppelklick starten (Meldung wegklicken),
+  dann **Systemeinstellungen → Datenschutz & Sicherheit** öffnen, ganz unten steht
+  „SnippetAffAIrs wurde blockiert…" → **„Trotzdem öffnen"** → im Dialog bestätigen.
+
+Danach startet die App immer ganz normal. (Signierte Builds ohne diese Meldung sind in Vorbereitung.)
+</details>
+
+<details>
+<summary>🪟 <b>Windows meldet „Der Computer wurde geschützt" (SmartScreen)?</b> (einmalig)</summary>
+
+Ebenfalls normal bei Apps ohne (teures) Code-Signing-Zertifikat. So startest du die Installation:
+**Im blauen Fenster auf „Weitere Informationen" klicken → dann „Trotzdem ausführen".**
+Danach läuft der Installer normal durch.
 </details>
 
 ### 2. espanso installieren (die Engine, einmalig)

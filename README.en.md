@@ -74,8 +74,22 @@ the clean, simple interface for creating and managing those shortcuts.
 <details>
 <summary>🍎 <b>macOS says "unverified / cannot be opened"?</b> (one time)</summary>
 
-That's normal for free apps without an expensive Apple certificate. To open it anyway:
-**right-click the app → "Open" → in the dialog click "Open" again.** After that it launches normally.
+Normal for apps not (yet) signed by Apple — not an error, not a risk. Open it anyway,
+depending on your macOS version:
+
+- **macOS 14 and older:** **right-click the app → "Open" → click "Open" again in the dialog.**
+- **macOS 15 (Sequoia) and newer:** double-click once (dismiss the message), then open
+  **System Settings → Privacy & Security**, scroll to the bottom where it says
+  "SnippetAffAIrs was blocked…" → **"Open Anyway"** → confirm.
+
+After that it always launches normally. (Signed builds without this prompt are in the works.)
+</details>
+
+<details>
+<summary>🪟 <b>Windows says "Windows protected your PC" (SmartScreen)?</b> (one time)</summary>
+
+Also normal for apps without an (expensive) code-signing certificate. To run the installer:
+**click "More info" in the blue window → then "Run anyway".** The installer then proceeds normally.
 </details>
 
 ### 2. Install espanso (the engine, one time)
