@@ -48,15 +48,29 @@ und verwaltest.
 > **Voraussetzung:** SnippetAffAIrs ist die Oberfläche für die kostenlose Engine **espanso**.
 > Die installierst du einmalig mit — das ist ein einzelner Befehl bzw. Klick, siehe unten.
 
-### 1. SnippetAffAIrs herunterladen
-Gehe zur **[👉 Download-Seite (Releases)](https://github.com/clauszeissler-dot/snippetaffairs/releases/latest)**
-und lade die Datei für dein System:
+### 1. SnippetAffAIrs herunterladen — Button für dein System
+
+<p align="center">
+  <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest/download/SnippetAffAIrs-macOS-AppleSilicon.dmg"><img src="https://img.shields.io/badge/macOS-Apple_Silicon_·_.dmg-FC8337?style=for-the-badge&logo=apple&logoColor=white" alt="Download für macOS"></a>
+  &nbsp;
+  <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest"><img src="https://img.shields.io/badge/Windows-.exe-2D2D2D?style=for-the-badge&logo=windows11&logoColor=00E5FF" alt="Download für Windows"></a>
+  &nbsp;
+  <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest"><img src="https://img.shields.io/badge/Linux-.AppImage_·_.deb-2D2D2D?style=for-the-badge&logo=linux&logoColor=00E5FF" alt="Download für Linux"></a>
+</p>
+
+> ℹ️ **macOS (Apple Silicon)** ist als fertige Datei da — der Button lädt sie direkt.
+> **Windows**, **Linux** und **macOS (Intel)** werden automatisch gebaut und erscheinen auf der
+> [Release-Seite](https://github.com/clauszeissler-dot/snippetaffairs/releases/latest); diese
+> beiden Buttons führen dorthin (Build via GitHub Actions, siehe Abschnitt „Für Entwickler").
+
+**Welche Datei ist für mich?**
 
 | System | Datei | Installation |
 |--------|-------|--------------|
-| 🪟 **Windows** | `SnippetAffAIrs_x.x.x_x64-setup.exe` | Doppelklick → „Installieren". Fertig. |
-| 🍎 **macOS** | `SnippetAffAIrs_x.x.x_aarch64.dmg` | Öffnen → App ins „Programme"-Fenster ziehen. |
-| 🐧 **Linux** | `.AppImage` oder `.deb` | AppImage ausführbar machen & starten. |
+| 🍎 macOS (Apple Silicon, M1–M4) | `SnippetAffAIrs_…_aarch64.dmg` | Öffnen → App ins „Programme"-Fenster ziehen |
+| 🍎 macOS (Intel) | `SnippetAffAIrs_…_x64.dmg` | dito |
+| 🪟 Windows | `SnippetAffAIrs_…_x64-setup.exe` | Doppelklick → „Installieren" |
+| 🐧 Linux | `.AppImage` (ausführbar machen) **oder** `.deb` | AppImage starten bzw. `sudo dpkg -i …` |
 
 <details>
 <summary>🍎 <b>macOS meldet „nicht verifiziert / kann nicht geöffnet werden"?</b> (einmalig)</summary>
