@@ -154,7 +154,10 @@ and Linux packages.
 
 ## 📄 License
 
-Code under the **[MIT license](LICENSE)** — free to use, including commercially.
+**[CC BY 4.0](LICENSE)** (Attribution 4.0 International) — free to use, share and adapt,
+including commercially, **as long as you credit the creator**:
+"KI AffAIrs (Claus Zeißler)" · [affairs-consulting.de](https://www.affairs-consulting.de).
+
 espanso itself is GPL-3.0 and is only invoked as a separate program (not embedded).
 
 ---

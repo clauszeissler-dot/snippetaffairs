@@ -156,7 +156,10 @@ Installer für alle Plattformen werden automatisch per GitHub Actions gebaut (si
 
 ## 📄 Lizenz
 
-Code unter der **[MIT-Lizenz](LICENSE)** — frei nutzbar, auch kommerziell.
+**[CC BY 4.0](LICENSE)** (Namensnennung 4.0 International) — frei nutzbar, weitergebbar und
+veränderbar, auch kommerziell, **solange du den Ersteller nennst**:
+„KI AffAIrs (Claus Zeißler)" · [affairs-consulting.de](https://www.affairs-consulting.de).
+
 espanso selbst steht unter GPL-3.0 und wird nur als eigenständiges Programm aufgerufen
 (nicht eingebettet).
 

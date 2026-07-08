@@ -3,6 +3,7 @@ name = "snippetaffairs"
 version = "0.1.0"
 description = "SnippetAffAIrs — Text-Expander-GUI (espanso) im KI-AffAIrs-Design"
 authors = ["KI AffAIrs (Claus Zeißler)"]
+license = "CC-BY-4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
