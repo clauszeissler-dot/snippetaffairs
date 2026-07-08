@@ -1,0 +1,77 @@
+name: Release
+
+# Baut Installer für macOS, Windows und Linux und hängt sie automatisch an das
+# veröffentlichte GitHub-Release. Auslöser: ein Release veröffentlichen ODER
+# manuell über "Run workflow".
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release-Tag, an das die Installer angehängt werden"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest      # Apple Silicon (arm64)
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-latest      # Intel (x86_64)
+            args: "--target x86_64-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bun einrichten
+        uses: oven-sh/setup-bun@v2
+
+      - name: Rust (stable) einrichten
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ contains(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust-Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Linux-Systemabhängigkeiten
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            file \
+            wget
+
+      - name: Frontend-Abhängigkeiten
+        run: bun install
+
+      - name: Bauen + an Release anhängen
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          releaseName: "SnippetAffAIrs ${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

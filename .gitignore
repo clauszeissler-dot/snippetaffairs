@@ -25,6 +25,3 @@ STATUS.md
 *.njsproj
 *.sln
 *.sw?
-
-# TEMP: Workflow erst nach gh-Scope "workflow" pushen
-.github/workflows/release.yml
