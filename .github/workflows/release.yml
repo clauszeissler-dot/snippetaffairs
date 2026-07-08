@@ -75,3 +75,28 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Legt versionsfreie Kopien der drei Haupt-Installer an, damit die README-Buttons
+  # stabile Direkt-Downloads (…/releases/latest/download/<Name>) sein können.
+  stable-names:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Versionsfreie Kopien anlegen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          set -e
+          mkdir dl && cd dl
+          gh release download "$TAG" -p "*_aarch64.dmg" -p "*_x64-setup.exe" -p "*_amd64.AppImage"
+          cp *_aarch64.dmg    SnippetAffAIrs-macOS-AppleSilicon.dmg
+          cp *_x64-setup.exe  SnippetAffAIrs-Windows-Setup.exe
+          cp *_amd64.AppImage SnippetAffAIrs-Linux.AppImage
+          gh release upload "$TAG" --clobber \
+            SnippetAffAIrs-macOS-AppleSilicon.dmg \
+            SnippetAffAIrs-Windows-Setup.exe \
+            SnippetAffAIrs-Linux.AppImage
