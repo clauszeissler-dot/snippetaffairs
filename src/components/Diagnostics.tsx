@@ -30,6 +30,8 @@ export default function Diagnostics({ info, running, autostart, notify, onError 
   }, []);
 
   useEffect(() => {
+    // `loadLog` setzt State erst nach `await` — kein synchroner setState.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLog();
   }, [loadLog]);
 

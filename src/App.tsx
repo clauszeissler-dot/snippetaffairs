@@ -141,6 +141,9 @@ export default function App() {
       .catch(() => {
         /* außerhalb von Tauri (vite dev im Browser) — Default bleibt stehen */
       });
+    // Initiales Laden beim Mount. Die Regel kann die async-Grenze nicht
+    // durchdringen: alle drei setzen State erst nach `await`, nicht synchron.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadInfo();
     loadSnippets();
     refreshStatus();

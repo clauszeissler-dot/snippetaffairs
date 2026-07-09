@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { AppError } from "../lib/errors";
 import {
+  cmpVersion,
   fetchHubIndex,
   fetchManifest,
   parseInstalledPackages,
@@ -23,10 +24,12 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
   const [query, setQuery] = useState("");
   const [installed, setInstalled] = useState<Map<string, string>>(new Map());
   const [busyPkg, setBusyPkg] = useState<string | null>(null);
-  const details = useRef<Map<string, Partial<HubPackage>>>(new Map());
-  const [, force] = useState(0);
+  // Details liegen im State, nicht in einem Ref: sonst rechnet `filtered` nicht
+  // neu, wenn Titel und Beschreibungen nachträglich eintreffen — die Suche über
+  // diese Felder liefe dann auf einem veralteten Stand.
+  const [details, setDetails] = useState<Map<string, Partial<HubPackage>>>(new Map());
 
-  async function loadInstalled() {
+  const loadInstalled = useCallback(async () => {
     try {
       const r = await api.packageList();
       setInstalled(parseInstalledPackages(r.output || ""));
@@ -34,7 +37,7 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
       // Kein Blocker: ohne Liste fehlt nur die „installiert"-Markierung.
       setInstalled(new Map());
     }
-  }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -50,7 +53,7 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
       }
       loadInstalled();
     })();
-  }, []);
+  }, [loadInstalled]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -58,30 +61,35 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
       ? index.filter(
           (p) =>
             p.name.toLowerCase().includes(q) ||
-            (details.current.get(p.name)?.title ?? "").toLowerCase().includes(q) ||
-            (details.current.get(p.name)?.description ?? "").toLowerCase().includes(q)
+            (details.get(p.name)?.title ?? "").toLowerCase().includes(q) ||
+            (details.get(p.name)?.description ?? "").toLowerCase().includes(q)
         )
       : index;
     return base.slice(0, PAGE);
-  }, [query, index]);
+  }, [query, index, details]);
 
-  // Lazy-Details für die sichtbaren Karten nachladen
+  // Lazy-Details für die sichtbaren Karten nachladen. Sind alle da, ist
+  // `missing` leer und der Effekt läuft folgenlos aus — keine Schleife.
   useEffect(() => {
+    const missing = filtered.filter((p) => !details.has(p.name));
+    if (missing.length === 0) return;
+
     let cancelled = false;
     (async () => {
-      await Promise.all(
-        filtered.map(async (p) => {
-          if (details.current.has(p.name)) return;
-          const m = await fetchManifest(p.name, p.version);
-          if (!cancelled) details.current.set(p.name, m);
-        })
+      const loaded = await Promise.all(
+        missing.map(async (p) => [p.name, await fetchManifest(p.name, p.version)] as const)
       );
-      if (!cancelled) force((n) => n + 1);
+      if (cancelled) return;
+      setDetails((prev) => {
+        const next = new Map(prev);
+        for (const [name, manifest] of loaded) next.set(name, manifest);
+        return next;
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [filtered]);
+  }, [filtered, details]);
 
 
 
@@ -95,6 +103,21 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
       onChanged();
     } catch (e) {
       onError(e, () => doInstall(name));
+    } finally {
+      setBusyPkg(null);
+    }
+  }
+
+  async function doUpdate(name: string) {
+    setBusyPkg(name);
+    try {
+      const r = await api.packageUpdate(name);
+      if (!r.success) throw new AppError("AI-2016-FLOW", r.output);
+      notify(`Paket „${name}" aktualisiert.`);
+      await loadInstalled();
+      onChanged();
+    } catch (e) {
+      onError(e, () => doUpdate(name));
     } finally {
       setBusyPkg(null);
     }
@@ -150,8 +173,12 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
       ) : (
         <div className="hub-grid">
           {filtered.map((p) => {
-            const d = details.current.get(p.name) ?? {};
-            const isInstalled = installed.has(p.name);
+            const d = details.get(p.name) ?? {};
+            const installedVersion = installed.get(p.name);
+            const isInstalled = installedVersion !== undefined;
+            // Leere Version = Formatdrift der CLI-Ausgabe → kein Update anbieten,
+            // statt fälschlich „veraltet" zu behaupten.
+            const outdated = !!installedVersion && cmpVersion(p.version, installedVersion) > 0;
             const busy = busyPkg === p.name;
             return (
               <div className="card pkg" key={p.name}>
@@ -175,11 +202,21 @@ export default function HubBrowser({ notify, onError, onChanged }: Props) {
                 <div className="pkg-foot">
                   {isInstalled ? (
                     <>
-                      <span className="pkg-installed">
-                        ✓ installiert
-                        {installed.get(p.name) ? ` · v${installed.get(p.name)}` : ""}
+                      <span className={`pkg-installed ${outdated ? "outdated" : ""}`}>
+                        {outdated ? "↑ Update verfügbar" : "✓ installiert"}
+                        {installedVersion ? ` · v${installedVersion}` : ""}
                       </span>
                       <div className="spacer" style={{ flex: 1 }} />
+                      {outdated && (
+                        <button
+                          className="btn btn-cta btn-sm"
+                          disabled={busy}
+                          title={`Auf v${p.version} aktualisieren`}
+                          onClick={() => doUpdate(p.name)}
+                        >
+                          {busy ? <span className="spin" /> : `Auf v${p.version}`}
+                        </button>
+                      )}
                       <button
                         className="btn btn-danger btn-sm"
                         disabled={busy}

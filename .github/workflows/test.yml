@@ -49,11 +49,18 @@ jobs:
       - name: Frontend-Abhängigkeiten
         run: bun install
 
+      - name: Lint (ESLint)
+        run: bun run lint
+
       - name: Frontend-Tests (Fehler-Resolver, Hub-Parser)
         run: bun run test
 
       - name: Typecheck + Build
         run: bun run build
+
+      - name: Lint (Clippy, Warnungen sind Fehler)
+        working-directory: ./src-tauri
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Rust-Tests (Datenintegrität + IPC-Naht)
         working-directory: ./src-tauri

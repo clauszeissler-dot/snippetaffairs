@@ -998,7 +998,7 @@ fn restore_from(path: &Path, kind: &str) -> Result<(), String> {
     // 2) Aktuellen Stand sichern (überschreibt .yml.bak — auch wenn genau das
     //    gerade die Quelle ist; deshalb liegt der Inhalt oben schon im Speicher).
     if path.exists() {
-        std::fs::copy(&path, path.with_extension("yml.bak"))
+        std::fs::copy(path, path.with_extension("yml.bak"))
             .map_err(|e| ecb(ECB_CORE, format!("Sicherung fehlgeschlagen: {e}")))?;
     }
 
@@ -1006,7 +1006,7 @@ fn restore_from(path: &Path, kind: &str) -> Result<(), String> {
     let tmp = path.with_extension("yml.restore.tmp");
     std::fs::write(&tmp, content.as_bytes())
         .map_err(|e| ecb(ECB_CORE, format!("Schreiben fehlgeschlagen: {e}")))?;
-    std::fs::rename(&tmp, &path)
+    std::fs::rename(&tmp, path)
         .map_err(|e| ecb(ECB_CORE, format!("Atomares Umbenennen fehlgeschlagen: {e}")))?;
     Ok(())
 }

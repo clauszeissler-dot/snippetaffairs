@@ -74,11 +74,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* „ai"-Regel: die Buchstaben AI/ai in Marken-/UI-Text immer Orange */
-.ai {
-  color: var(--ki-orange);
-}
-
 h1,
 h2,
 h3 {
@@ -93,10 +88,6 @@ h3 {
 .glow-orange {
   text-shadow: 0 0 20px var(--ki-glow-orange), 0 0 40px var(--ki-glow-orange);
 }
-.glow-cyan {
-  text-shadow: 0 0 10px var(--ki-glow-cyan), 0 0 20px var(--ki-glow-cyan);
-}
-
 /* ---------------------------------------------------------------- Layout */
 .app {
   display: grid;
@@ -834,4 +825,8 @@ h3 {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.pkg-installed.outdated {
+  color: var(--ki-orange);
 }

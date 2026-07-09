@@ -69,21 +69,21 @@ Die App schreibt fremde Nutzerdateien. Deshalb gilt in `espanso.rs`:
 
 Wer diese Garantien anfasst, ergänzt einen Test in `espanso.rs`.
 
-## 4. Die espanso-CLI lügt über ihren Exit-Code
+## 4. Die espanso-CLI lügt über ihren Exit-Code — aber nicht überall
 
-Zwei verifizierte Fälle — beide würden sonst zu gemeldeten Erfolgen führen, die keine sind:
+Verifiziert (espanso 2.3.0):
 
-| Befehl | Verhalten |
-|---|---|
-| `espanso --version` | Exit-Code **1**, Version steht trotzdem auf stdout |
-| `espanso match exec` | Exit-Code **0**, auch bei „unable to exec match: Worker process is not running" |
+| Befehl | Exit-Code im Fehlerfall | Verlässlich? |
+|---|---|---|
+| `espanso --version` | **1** — obwohl erfolgreich | nein, stdout parsen |
+| `espanso match exec` | **0** — trotz „Worker process is not running" | nein, Ausgabe prüfen (`exec_failed`) |
+| `espanso service check` | 0 — Zustand nur im Klartext | nein, Text auswerten |
+| `espanso install` | 2 | **ja** |
+| `espanso uninstall` | 3 | **ja** |
+| `espanso package update` | 5 | **ja** |
 
-Deshalb wertet `match_exec` die **Ausgabe** aus (`exec_failed`), nicht `success`. Bei neuen
-CLI-Aufrufen immer erst prüfen, was der Befehl im Fehlerfall wirklich tut — nicht annehmen,
-dass ein Exit-Code aussagekräftig ist.
-
-Auch `service check` meldet den Zustand nur im Klartext („registered as a service" /
-„… not registered …") — deshalb Textauswertung statt Exit-Code.
+Bei jedem neuen CLI-Aufruf **einmal mit falschem Argument ausprobieren** und den Exit-Code
+notieren, statt ihn anzunehmen. Die Tabelle oben ist so entstanden.
 
 ## 5. Destruktive Datei-Operationen liegen hinter `ensure_within`
 
@@ -111,12 +111,19 @@ Der Code steht unter CC BY 4.0, das Logo (`src/components/Logo.tsx`, `src-tauri/
 die Namen „KI AffAIrs" / „SnippetAffAIrs" nicht — siehe LICENSE. Das Monogramm ist 1:1 aus dem
 offiziellen Logopaket übernommen, nicht nachgezeichnet. Es wird nie generiert oder verändert.
 
-## 9. Tests
+## 9. Tests und Linter
 
 ```bash
-cd src-tauri && cargo test   # 24 Tests: Datenintegrität, Pfad-Schutz, IPC-Naht
-bun run test                 # 23 Tests: Fehler-Resolver + Hub-Parser
-bun run build                # tsc + vite
+bun run lint                                        # ESLint (0 Fehler)
+bun run test                                        # 28 Tests: Fehler-Resolver, Hub-Parser, cmpVersion
+bun run build                                       # tsc + vite
+cd src-tauri && cargo clippy --all-targets -- -D warnings
+cd src-tauri && cargo test                          # 24 Tests: Datenintegrität, Pfad-Schutz, IPC-Naht
 ```
 
-Alle drei müssen grün sein, bevor ein Release getaggt wird.
+Alle fünf laufen in der CI (`.github/workflows/test.yml`) und müssen grün sein, bevor ein
+Release getaggt wird. Clippy läuft dort mit `-D warnings`.
+
+Zwei bewusste ESLint-Ausnahmen (`react-hooks/set-state-in-effect` in `App.tsx` und
+`Diagnostics.tsx`): die Regel durchdringt die `async`-Grenze nicht — dort wird State erst
+nach `await` gesetzt, nicht synchron im Effekt.

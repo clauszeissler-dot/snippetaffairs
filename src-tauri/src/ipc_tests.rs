@@ -63,7 +63,6 @@ fn invoke(cmd: &str, body: serde_json::Value) -> Result<serde_json::Value, serde
         },
     )
     .map(|r| r.deserialize::<serde_json::Value>().unwrap_or(json!(null)))
-    .map_err(|e| e.into())
 }
 
 fn tmp(name: &str) -> std::path::PathBuf {

@@ -19,9 +19,17 @@ export interface HubPackage {
   homepage?: string;
 }
 
-function cmpVersion(a: string, b: string): number {
-  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+/**
+ * Semver-artiger Vergleich. >0 wenn a neuer als b.
+ *
+ * Ein führendes „v" wird abgeschnitten: `parseInt("v1")` ergibt NaN → 0, und
+ * „v1" gälte damit als älter als „1" — die Oberfläche würde ein Update anbieten,
+ * das keines ist.
+ */
+export function cmpVersion(a: string, b: string): number {
+  const parts = (v: string) => v.trim().replace(/^v/i, "").split(".");
+  const pa = parts(a).map((n) => parseInt(n, 10) || 0);
+  const pb = parts(b).map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const d = (pa[i] || 0) - (pb[i] || 0);
     if (d !== 0) return d;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInstalledPackages } from "./hub";
+import { cmpVersion, parseInstalledPackages } from "./hub";
 
 // Verifiziertes Ausgabeformat von `espanso package list`.
 const REAL_OUTPUT = `- all-emojis - version: 0.2.0 (espanso-hub)
@@ -37,5 +37,33 @@ describe("parseInstalledPackages", () => {
   it("übernimmt Zeilen ohne Version tolerant (Formatdrift)", () => {
     const m = parseInstalledPackages("- nur-name\n");
     expect(m.get("nur-name")).toBe("");
+  });
+});
+
+describe("cmpVersion", () => {
+  it("erkennt neuere Versionen", () => {
+    expect(cmpVersion("1.0.1", "1.0.0")).toBeGreaterThan(0);
+    expect(cmpVersion("1.1.0", "1.0.9")).toBeGreaterThan(0);
+    expect(cmpVersion("2.0.0", "1.9.9")).toBeGreaterThan(0);
+  });
+
+  it("erkennt Gleichstand — sonst würde die App dauerhaft Updates behaupten", () => {
+    expect(cmpVersion("1.2.3", "1.2.3")).toBe(0);
+    expect(cmpVersion("1.2", "1.2.0")).toBe(0);
+  });
+
+  it("erkennt ältere Versionen", () => {
+    expect(cmpVersion("1.0.0", "1.0.1")).toBeLessThan(0);
+  });
+
+  it("verkraftet unsaubere Versionsangaben", () => {
+    expect(cmpVersion("", "")).toBe(0);
+    expect(cmpVersion("1.0.0", "")).toBeGreaterThan(0);
+  });
+
+  it("ignoriert ein führendes v — sonst gäbe es ein Update, das keines ist", () => {
+    expect(cmpVersion("v1.2.3", "1.2.3")).toBe(0);
+    expect(cmpVersion("1.2.3", "v1.2.3")).toBe(0);
+    expect(cmpVersion("v1.3.0", "v1.2.9")).toBeGreaterThan(0);
   });
 });
