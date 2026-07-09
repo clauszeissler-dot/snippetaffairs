@@ -58,14 +58,24 @@ kopieren.
 Die App schreibt fremde Nutzerdateien. Deshalb gilt in `espanso.rs`:
 
 - **Round-Trip-sicher:** unbekannte Felder liegen in `extra` (`#[serde(flatten)]`) und
-  überleben jeden Schreibvorgang. Test: `round_trip_preserves_vars`.
+  überleben jeden Schreibvorgang. Tests: `round_trip_preserves_vars` und
+  `round_trip_preserves_complex_document` (kompletter Lese-Schreib-Lese-Zyklus über
+  ein realistisches Dokument mit shell-`vars`, `form`/`form_fields`, `triggers`-Liste,
+  `regex`, `word`/`propagate_case`, `global_vars`, `imports`).
 - **Erweiterte Matches** (`vars`, `form`, `regex`, `image_path`, `triggers`) sind
   schreibgeschützt — im Frontend *und* im Backend (`is_advanced`).
 - **Staleness-Guard:** `save_snippet`/`delete_snippet` bekommen `expectedTrigger` und
   brechen ab, wenn der Index nicht mehr auf das angezeigte Snippet zeigt.
 - **Atomar schreiben:** temp + rename, vorher Re-Parse-Validierung.
 - **Backups:** `.yml.bak` (letzter Stand) und einmalig `.yml.orig` (Original mit
-  Kommentaren — serde_yaml kann Kommentare nicht erhalten).
+  Kommentaren — die YAML-Bibliothek kann Kommentare nicht erhalten).
+
+**YAML-Parser:** Das eingestellte `serde_yaml` (0.9.34+deprecated) wurde durch
+`serde_norway` ersetzt — einen aktiv gepflegten, API-kompatiblen Hard-Fork, den auch
+espanso selbst nutzt (espanso PR #2532). Eingebunden in `src-tauri/Cargo.toml` als
+`serde_norway = "=0.9.42"` (exakt gepinnt, kein Floating); der Backend-Code verwendet
+`serde_norway::` direkt. Der Fork bringt keinen CVE-Fix (das Finding war „nur"
+Wartungsrisiko), entfernt aber die vom Autor selbst als deprecated markierte Abhängigkeit.
 
 Wer diese Garantien anfasst, ergänzt einen Test in `espanso.rs`.
 

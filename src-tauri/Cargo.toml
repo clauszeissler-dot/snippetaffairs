@@ -28,7 +28,15 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
+# YAML-Parser: serde_norway statt des eingestellten serde_yaml (0.9.34+deprecated,
+# letztes Update 03/2024, vom Autor selbst als deprecated markiert — bekommt keine
+# Fixes mehr, verarbeitet hier aber FREMDE Dateien). serde_norway ist ein aktiv
+# gepflegter, API-kompatibler Hard-Fork (Maintainerin Christina Sørensen, 2025 noch
+# responsiv, keine RUSTSEC-Advisory) und exakt die Bibliothek, die auch espanso selbst
+# nutzt (espanso PR #2532) — so parst diese GUI die YAMLs mit dem Parser der Engine,
+# die sie erzeugt und liest. Exakt gepinnt (`=`, kein Floating), damit der Wechsel
+# bewusst und überprüfbar bleibt.
+serde_norway = "=0.9.42"
 
 
 [dev-dependencies]

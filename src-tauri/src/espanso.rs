@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+use serde_norway::Value;
 
 // ---------------------------------------------------------------------------
 // Fehlercodes (errorcodebase-Standard, siehe AGENTS.md)
@@ -394,22 +394,22 @@ fn read_doc(path: &Path) -> Result<MatchDoc, String> {
     if raw.trim().is_empty() {
         return Ok(MatchDoc::default());
     }
-    serde_yaml::from_str::<MatchDoc>(&raw)
+    serde_norway::from_str::<MatchDoc>(&raw)
         .map_err(|e| ecb(ECB_CORE, format!("Ungültiges YAML in {}: {e}", path.display())))
 }
 
 /// Schreibt ein MatchDoc atomar (temp + rename) und legt vorher Backups an.
 ///
-/// Hinweis Kommentare: serde_yaml kann YAML-Kommentare nicht erhalten — ein
+/// Hinweis Kommentare: serde_norway kann YAML-Kommentare nicht erhalten — ein
 /// Rewrite verliert sie. Darum wird vor der ALLERERSTEN GUI-Änderung einer
 /// Datei einmalig ein unangetastetes `.yml.orig` abgelegt (bewahrt Original
 /// samt Kommentaren dauerhaft); `.yml.bak` hält zusätzlich den jeweils
 /// letzten Stand vor dem aktuellen Schreibvorgang.
 fn write_doc(path: &Path, doc: &MatchDoc) -> Result<(), String> {
     // 1) YAML serialisieren und VOR dem Schreiben erneut parsen (Validierung)
-    let yaml = serde_yaml::to_string(doc)
+    let yaml = serde_norway::to_string(doc)
         .map_err(|e| ecb(ECB_CORE, format!("YAML-Serialisierung fehlgeschlagen: {e}")))?;
-    serde_yaml::from_str::<MatchDoc>(&yaml).map_err(|e| {
+    serde_norway::from_str::<MatchDoc>(&yaml).map_err(|e| {
         ecb(ECB_CORE, format!("Interne Validierung fehlgeschlagen, Schreibvorgang abgebrochen: {e}"))
     })?;
 
@@ -537,19 +537,19 @@ fn build_simple_vars(replace: &str, date_format: &str) -> Option<Value> {
     let mut vars: Vec<Value> = Vec::new();
 
     if replace.contains("{{date}}") {
-        let mut params = serde_yaml::Mapping::new();
+        let mut params = serde_norway::Mapping::new();
         params.insert(
             Value::String("format".into()),
             Value::String(date_format.to_string()),
         );
-        let mut v = serde_yaml::Mapping::new();
+        let mut v = serde_norway::Mapping::new();
         v.insert(Value::String("name".into()), Value::String(VAR_DATE.into()));
         v.insert(Value::String("type".into()), Value::String("date".into()));
         v.insert(Value::String("params".into()), Value::Mapping(params));
         vars.push(Value::Mapping(v));
     }
     if replace.contains("{{clipboard}}") {
-        let mut v = serde_yaml::Mapping::new();
+        let mut v = serde_norway::Mapping::new();
         v.insert(
             Value::String("name".into()),
             Value::String(VAR_CLIPBOARD.into()),
@@ -1080,7 +1080,7 @@ fn restore_from(path: &Path, kind: &str) -> Result<(), String> {
     // 1) Inhalt lesen und validieren, BEVOR irgendetwas überschrieben wird.
     let content = std::fs::read_to_string(&source)
         .map_err(|e| ecb(ECB_CORE, format!("Backup nicht lesbar: {e}")))?;
-    serde_yaml::from_str::<MatchDoc>(&content).map_err(|e| {
+    serde_norway::from_str::<MatchDoc>(&content).map_err(|e| {
         ecb(
             ECB_CORE,
             format!("Das Backup ist beschädigt, Wiederherstellung abgebrochen: {e}"),
@@ -1278,19 +1278,19 @@ mod tests {
     #[test]
     fn round_trip_preserves_vars() {
         // Ein Match mit vars darf beim Serialisieren NICHT verloren gehen.
-        let doc: MatchDoc = serde_yaml::from_str(WITH_VARS).unwrap();
+        let doc: MatchDoc = serde_norway::from_str(WITH_VARS).unwrap();
         assert_eq!(doc.matches.len(), 2);
-        let yaml = serde_yaml::to_string(&doc).unwrap();
+        let yaml = serde_norway::to_string(&doc).unwrap();
         assert!(yaml.contains("vars"), "vars muss erhalten bleiben");
         assert!(yaml.contains("mydate"));
-        let back: MatchDoc = serde_yaml::from_str(&yaml).unwrap();
+        let back: MatchDoc = serde_norway::from_str(&yaml).unwrap();
         assert_eq!(back.matches.len(), 2);
         assert!(back.matches[1].extra.contains_key("vars"));
     }
 
     #[test]
     fn snippet_view_flags_advanced() {
-        let doc: MatchDoc = serde_yaml::from_str(WITH_VARS).unwrap();
+        let doc: MatchDoc = serde_norway::from_str(WITH_VARS).unwrap();
         let simple = snippet_view(0, &doc.matches[0]);
         let with_vars = snippet_view(1, &doc.matches[1]);
         assert!(!simple.advanced, "einfaches Match ist editierbar");
@@ -1457,10 +1457,10 @@ mod tests {
     #[test]
     fn tolerates_non_string_scalars() {
         // YAML-Footgun: unquotierte Skalare landen als bool/int im Dokument.
-        // (serde_yaml folgt YAML 1.2: `no` bleibt String, `true` wird bool.)
+        // (serde_norway folgt YAML 1.2: `no` bleibt String, `true` wird bool.)
         // Solche Dateien müssen lesbar bleiben, statt komplett abgelehnt zu werden.
         let yaml = "matches:\n  - trigger: no\n    replace: 42\n  - trigger: true\n    replace: 3.5\n";
-        let doc: MatchDoc = serde_yaml::from_str(yaml).unwrap();
+        let doc: MatchDoc = serde_norway::from_str(yaml).unwrap();
         assert_eq!(doc.matches[0].trigger.as_deref(), Some("no"));
         assert_eq!(doc.matches[0].replace.as_deref(), Some("42"));
         assert_eq!(doc.matches[1].trigger.as_deref(), Some("true"));
@@ -1472,7 +1472,7 @@ mod tests {
     #[test]
     fn simple_vars_are_editable_foreign_vars_are_not() {
         // Von uns erzeugt → editierbar.
-        let ours: MatchDoc = serde_yaml::from_str(
+        let ours: MatchDoc = serde_norway::from_str(
             "matches:\n  - trigger: \":d\"\n    replace: \"{{date}}\"\n    vars:\n      - name: date\n        type: date\n        params:\n          format: \"%d.%m.%Y\"\n",
         )
         .unwrap();
@@ -1486,7 +1486,7 @@ mod tests {
             // richtiger Name, aber zusätzliches Feld → nicht unser Schema
             "matches:\n  - trigger: \":c\"\n    replace: \"{{clipboard}}\"\n    vars:\n      - name: clipboard\n        type: clipboard\n        inject: true\n",
         ] {
-            let doc: MatchDoc = serde_yaml::from_str(yaml).unwrap();
+            let doc: MatchDoc = serde_norway::from_str(yaml).unwrap();
             assert!(
                 is_advanced(&doc.matches[0]),
                 "fremde vars müssen read-only bleiben: {yaml}"
@@ -1788,5 +1788,139 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&orig);
         let _ = std::fs::remove_file(path.with_extension("yml.bak"));
+    }
+
+    /// Datenintegritäts-Beweis für den Parser-Wechsel (serde_yaml → serde_norway):
+    /// Ein realistisches, komplexes Dokument muss einen vollständigen
+    /// Lese-Schreib-Lese-Zyklus über die ECHTEN Code-Pfade (`read_doc`/`write_doc`,
+    /// inkl. der internen Re-Parse-Validierung) unbeschadet überstehen. Abgedeckt:
+    /// shell-`vars` mit `params`, `form` + `form_fields`, `triggers`-Liste, `regex`,
+    /// `word: true` + `propagate_case: true` sowie auf Dokument-Ebene `global_vars`
+    /// und `imports`. Verliert der Parser hier auch nur einen Schlüssel, zerstört
+    /// die App fremde Nutzerdateien — genau das darf der Wechsel NICHT tun.
+    #[test]
+    fn round_trip_preserves_complex_document() {
+        let complex = r#"imports:
+  - "../base/common.yml"
+
+global_vars:
+  - name: greeting
+    type: echo
+    params:
+      echo: "Moin"
+
+matches:
+  - trigger: ":sh"
+    replace: "{{output}}"
+    vars:
+      - name: output
+        type: shell
+        params:
+          cmd: "echo hello"
+  - trigger: ":form"
+    replace: "Name: [[name]]"
+    form: "Bitte [[name]] eingeben"
+    form_fields:
+      name:
+        multiline: false
+  - triggers: [":a", ":b", ":c"]
+    replace: "Mehrfach-Trigger"
+  - regex: "greet(?P<n>\\d+)"
+    replace: "Treffer {{n}}"
+  - trigger: ":sig"
+    replace: "SIGNATUR"
+    word: true
+    propagate_case: true
+"#;
+
+        let path = tmp_path("complex_roundtrip");
+        for f in [&path, &path.with_extension("yml.bak"), &path.with_extension("yml.orig")] {
+            let _ = std::fs::remove_file(f);
+        }
+        std::fs::write(&path, complex).unwrap();
+
+        // 1) Lesen über den echten Pfad.
+        let doc1 = read_doc(&path).unwrap();
+        assert_eq!(doc1.matches.len(), 5, "alle 5 Matches müssen gelesen werden");
+
+        // 2) Schreiben über den echten Pfad (serialisiert + intern re-parst + atomar).
+        write_doc(&path, &doc1).unwrap();
+
+        // 3) Erneut lesen — nichts darf sich verändert oder verflüchtigt haben.
+        let doc2 = read_doc(&path).unwrap();
+        assert_eq!(doc2.matches.len(), 5);
+
+        // (a) Dokument-Ebene: global_vars + imports vorhanden UND bitidentisch.
+        assert!(doc2.extra.contains_key("imports"), "imports verloren");
+        assert!(doc2.extra.contains_key("global_vars"), "global_vars verloren");
+        assert_eq!(doc1.extra, doc2.extra, "Dokument-Ebene muss unverändert round-trippen");
+
+        // (b) Jedes Match ist vor/nach dem Zyklus feldgleich (auch alle extra-Felder).
+        for (a, b) in doc1.matches.iter().zip(doc2.matches.iter()) {
+            assert_eq!(a.trigger, b.trigger);
+            assert_eq!(a.triggers, b.triggers);
+            assert_eq!(a.replace, b.replace);
+            assert_eq!(a.label, b.label);
+            assert_eq!(a.extra, b.extra, "extra-Felder eines Matches gingen verloren/verändert");
+        }
+
+        // (c) Explizit: jeder geforderte Schlüssel/Wert ist nach dem Round-Trip konkret da.
+        // shell-vars → params.cmd
+        let sh = doc2.matches.iter().find(|m| m.trigger.as_deref() == Some(":sh")).unwrap();
+        let Some(Value::Sequence(vars)) = sh.extra.get("vars") else {
+            panic!("shell-vars verloren");
+        };
+        let vm = vars[0].as_mapping().unwrap();
+        assert_eq!(
+            vm.get(Value::String("type".into())).and_then(|v| v.as_str()),
+            Some("shell"),
+            "vars.type=shell verloren"
+        );
+        assert_eq!(
+            vm.get(Value::String("params".into()))
+                .and_then(|v| v.as_mapping())
+                .and_then(|p| p.get(Value::String("cmd".into())))
+                .and_then(|v| v.as_str()),
+            Some("echo hello"),
+            "vars.params.cmd verloren"
+        );
+
+        // form + form_fields
+        let form = doc2.matches.iter().find(|m| m.extra.contains_key("form")).unwrap();
+        assert!(form.extra.contains_key("form_fields"), "form_fields verloren");
+        assert_eq!(
+            form.extra.get("form").and_then(|v| v.as_str()),
+            Some("Bitte [[name]] eingeben"),
+            "form-Text verloren"
+        );
+
+        // triggers-Liste (drei Einträge, Reihenfolge stabil)
+        let multi = doc2.matches.iter().find(|m| m.triggers.is_some()).unwrap();
+        assert_eq!(
+            multi.triggers.as_deref(),
+            Some(&[":a".to_string(), ":b".to_string(), ":c".to_string()][..]),
+            "triggers-Liste verloren/umsortiert"
+        );
+
+        // regex
+        let rgx = doc2.matches.iter().find(|m| m.extra.contains_key("regex")).unwrap();
+        assert_eq!(
+            rgx.extra.get("regex").and_then(|v| v.as_str()),
+            Some("greet(?P<n>\\d+)"),
+            "regex verloren/verändert"
+        );
+
+        // word: true + propagate_case: true (bleiben echte Bools, werden nicht zu Strings)
+        let sig = doc2.matches.iter().find(|m| m.trigger.as_deref() == Some(":sig")).unwrap();
+        assert_eq!(sig.extra.get("word"), Some(&Value::Bool(true)), "word:true verloren");
+        assert_eq!(
+            sig.extra.get("propagate_case"),
+            Some(&Value::Bool(true)),
+            "propagate_case:true verloren"
+        );
+
+        for f in [&path, &path.with_extension("yml.bak"), &path.with_extension("yml.orig")] {
+            let _ = std::fs::remove_file(f);
+        }
     }
 }
