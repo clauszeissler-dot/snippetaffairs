@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, type EspansoInfo, type FileGroup, type SnippetView } from "./lib/api";
+import {
+  api,
+  type EspansoInfo,
+  type FileGroup,
+  type SnippetView,
+  type TriggerConflict,
+} from "./lib/api";
 import {
   AppError,
   createReport,
@@ -15,8 +21,12 @@ import SnippetEditor, { type EditorTarget } from "./components/SnippetEditor";
 import HubBrowser from "./components/HubBrowser";
 import ErrorDialog from "./components/ErrorDialog";
 import PromptModal from "./components/PromptModal";
+import TestSnippetModal from "./components/TestSnippetModal";
+import BackupsModal from "./components/BackupsModal";
+import Diagnostics from "./components/Diagnostics";
+import Logo from "./components/Logo";
 
-type View = "snippets" | "hub";
+type View = "snippets" | "hub" | "diag";
 type Toast = { msg: string; kind: "ok" | "err" } | null;
 
 /** Ein aufgelöster Fehler samt Kontext für Report und Wiederholung. */
@@ -32,10 +42,12 @@ const SUPPORT_MAIL = "info@affairs-consulting.de";
 export default function App() {
   const [info, setInfo] = useState<EspansoInfo | null>(null);
   const [groups, setGroups] = useState<FileGroup[]>([]);
+  const [conflicts, setConflicts] = useState<TriggerConflict[]>([]);
   const [view, setView] = useState<View>("snippets");
   const [activeFile, setActiveFile] = useState<string | null>(null); // null = alle
   const [query, setQuery] = useState("");
   const [running, setRunning] = useState<boolean | null>(null);
+  const [autostart, setAutostart] = useState<boolean | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
   const [confirmDel, setConfirmDel] = useState<{
@@ -45,6 +57,12 @@ export default function App() {
   } | null>(null);
   const [newFileOpen, setNewFileOpen] = useState(false);
   const [newFileBusy, setNewFileBusy] = useState(false);
+  const [renameFile, setRenameFile] = useState<FileGroup | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [confirmFileDel, setConfirmFileDel] = useState<FileGroup | null>(null);
+  const [backupsFor, setBackupsFor] = useState<FileGroup | null>(null);
+  const [testTrigger, setTestTrigger] = useState<string | null>(null);
+  const [showConflicts, setShowConflicts] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [svcBusy, setSvcBusy] = useState(false);
   const [error, setError] = useState<ErrorState | null>(null);
@@ -87,6 +105,12 @@ export default function App() {
     } catch (e) {
       fail(e);
     }
+    // Kollisionen sind eine Zusatzinfo — ihr Ausfall darf die Liste nicht kippen.
+    try {
+      setConflicts(await api.triggerConflicts());
+    } catch {
+      setConflicts([]);
+    }
   }, [fail]);
 
   const refreshStatus = useCallback(async () => {
@@ -97,6 +121,11 @@ export default function App() {
       setRunning(on);
     } catch {
       setRunning(null);
+    }
+    try {
+      setAutostart(await api.autostartEnabled());
+    } catch {
+      setAutostart(null);
     }
   }, []);
 
@@ -163,6 +192,12 @@ export default function App() {
     [groups]
   );
 
+  /** Trigger, die mehr als einmal vergeben sind — für die Markierung in der Liste. */
+  const conflictTriggers = useMemo(
+    () => new Set(conflicts.map((c) => c.trigger)),
+    [conflicts]
+  );
+
   // Sichtbare Gruppen: nach Datei-Filter + Suchfilter
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -181,6 +216,11 @@ export default function App() {
       }))
       .filter((g) => g.snippets.length > 0);
   }, [groups, activeFile, query]);
+
+  const activeGroup = useMemo(
+    () => groups.find((g) => g.path === activeFile) ?? null,
+    [groups, activeFile]
+  );
 
   // --- Service-Aktionen ----------------------------------------------------
   async function svc(action: "start" | "stop" | "restart") {
@@ -205,6 +245,32 @@ export default function App() {
     } finally {
       setSvcBusy(false);
       refreshStatus();
+    }
+  }
+
+  async function toggleAutostart() {
+    const turnOn = !autostart;
+    setSvcBusy(true);
+    try {
+      const r = turnOn ? await api.autostartEnable() : await api.autostartDisable();
+      if (!r.success) throw new AppError("AI-2016-FLOW", r.output);
+      notify(turnOn ? "Autostart aktiviert." : "Autostart deaktiviert.");
+    } catch (e) {
+      fail(e, toggleAutostart);
+    } finally {
+      setSvcBusy(false);
+      refreshStatus();
+    }
+  }
+
+  async function fireTest(trigger: string) {
+    setTestTrigger(null);
+    try {
+      // Das Backend erkennt auch die Fehler, die espanso mit Exit-Code 0 meldet.
+      await api.matchExec(trigger);
+      notify(`${trigger} ausgelöst.`);
+    } catch (e) {
+      fail(e);
     }
   }
 
@@ -260,6 +326,7 @@ export default function App() {
     }
   }
 
+  // --- Datei-Aktionen ------------------------------------------------------
   async function createFile(name: string) {
     setNewFileBusy(true);
     try {
@@ -276,6 +343,36 @@ export default function App() {
     }
   }
 
+  async function doRename(newName: string) {
+    if (!renameFile) return;
+    setRenameBusy(true);
+    try {
+      const path = await api.renameMatchFile(renameFile.path, newName);
+      setRenameFile(null);
+      notify("Datei umbenannt.");
+      await loadSnippets();
+      setActiveFile(path);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  async function doDeleteFile() {
+    if (!confirmFileDel) return;
+    const target = confirmFileDel;
+    setConfirmFileDel(null);
+    try {
+      await api.deleteMatchFile(target.path);
+      notify(`${target.name}.yml gelöscht.`);
+      setActiveFile(null);
+      await loadSnippets();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   const espansoMissing = info && !info.installed;
 
   return (
@@ -283,8 +380,11 @@ export default function App() {
       {/* -------------------------------------------------- Sidebar */}
       <aside className="sidebar">
         <div className="brand">
-          Snippet<span>Aff</span>
-          <span className="glow-orange">AI</span>rs
+          <Logo size={28} className="brand-logo" />
+          <span className="brand-text">
+            Snippet<span>Aff</span>
+            <span className="glow-orange">AI</span>rs
+          </span>
         </div>
         <div className="brand-sub">Text-Expander · KI AffAIrs</div>
 
@@ -325,6 +425,12 @@ export default function App() {
         >
           <span>🧩 Paket-Hub</span>
         </div>
+        <div
+          className={`nav-item ${view === "diag" ? "active" : ""}`}
+          onClick={() => setView("diag")}
+        >
+          <span>🩺 Diagnose</span>
+        </div>
 
         <div className="sidebar-foot">
           {info?.installed ? (
@@ -352,6 +458,15 @@ export default function App() {
             <b>{running === true ? "aktiv" : running === false ? "inaktiv" : "?"}</b>
           </span>
           <div className="spacer" />
+          <label className="switch" title="Engine beim Anmelden automatisch starten">
+            <input
+              type="checkbox"
+              checked={autostart === true}
+              disabled={svcBusy || autostart === null}
+              onChange={toggleAutostart}
+            />
+            <span>Autostart</span>
+          </label>
           <button className="btn btn-sm" disabled={svcBusy} onClick={() => svc("start")}>
             Start
           </button>
@@ -375,16 +490,47 @@ export default function App() {
             </div>
           )}
 
-          {view === "hub" ? (
+          {view === "diag" ? (
+            <Diagnostics
+              info={info}
+              running={running}
+              autostart={autostart}
+              notify={notify}
+              onError={fail}
+            />
+          ) : view === "hub" ? (
             <HubBrowser notify={notify} onError={fail} onChanged={loadSnippets} />
           ) : (
             <>
+              {conflicts.length > 0 && (
+                <div className="banner warn">
+                  <b>
+                    {conflicts.length} Trigger{" "}
+                    {conflicts.length === 1 ? "ist" : "sind"} doppelt vergeben.
+                  </b>{" "}
+                  Bei einer Doppelung expandiert die Engine nur eines der Snippets — ohne
+                  Hinweis.{" "}
+                  <button
+                    className="linklike"
+                    onClick={() => setShowConflicts((v) => !v)}
+                  >
+                    {showConflicts ? "Details ausblenden" : "Details anzeigen"}
+                  </button>
+                  {showConflicts && (
+                    <ul className="conflict-list">
+                      {conflicts.map((c) => (
+                        <li key={c.trigger}>
+                          <code>{c.trigger}</code> in{" "}
+                          {c.sites.map((s) => s.source).join(", ")}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               <div className="content-head">
-                <h2>
-                  {activeFile
-                    ? groups.find((g) => g.path === activeFile)?.name
-                    : "Alle Snippets"}
-                </h2>
+                <h2>{activeGroup ? activeGroup.name : "Alle Snippets"}</h2>
                 <div className="search">
                   <span>🔍</span>
                   <input
@@ -394,6 +540,28 @@ export default function App() {
                   />
                 </div>
                 <div className="spacer" />
+                {activeGroup && (
+                  <div className="file-actions">
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => setRenameFile(activeGroup)}
+                    >
+                      Umbenennen
+                    </button>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => setBackupsFor(activeGroup)}
+                    >
+                      Backups
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => setConfirmFileDel(activeGroup)}
+                    >
+                      Datei löschen
+                    </button>
+                  </div>
+                )}
                 <button className="btn btn-cta" onClick={openNew}>
                   ＋ Neues Snippet
                 </button>
@@ -401,7 +569,7 @@ export default function App() {
 
               {totalCount === 0 ? (
                 <div className="empty">
-                  <div className="big">⌨️</div>
+                  <Logo size={72} className="empty-logo" />
                   Noch keine Snippets. Leg mit <b>＋ Neues Snippet</b> los.
                 </div>
               ) : visibleGroups.length === 0 ? (
@@ -415,13 +583,29 @@ export default function App() {
                         <span className="trigger" title={s.trigger}>
                           {s.trigger}
                         </span>
+                        {conflictTriggers.has(s.trigger) && (
+                          <span
+                            className="badge warn"
+                            title="Dieser Trigger ist mehrfach vergeben — nur eines der Snippets wird ausgelöst."
+                          >
+                            ⚠ doppelt
+                          </span>
+                        )}
                         <span className="arrow">→</span>
                         <span className="replace">
                           {s.label && <span className="label">{s.label}</span>}
                           {s.replace}
                         </span>
-                        {s.advanced && <span className="badge">{s.kind}</span>}
+                        {s.kind !== "text" && <span className="badge">{s.kind}</span>}
                         <div className="actions">
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            title="Snippet im aktiven Fenster auslösen"
+                            disabled={running !== true}
+                            onClick={() => setTestTrigger(s.trigger)}
+                          >
+                            ▶ Testen
+                          </button>
                           <button
                             className="btn btn-sm btn-ghost"
                             onClick={() => openEdit(g, s)}
@@ -475,6 +659,44 @@ export default function App() {
         />
       )}
 
+      {/* -------------------------------------------------- Datei umbenennen */}
+      {renameFile && (
+        <PromptModal
+          title={`${renameFile.name}.yml umbenennen`}
+          label="Neuer Dateiname (ohne .yml)"
+          initial={renameFile.name}
+          hint="Vorhandene Backups (.yml.bak / .yml.orig) werden mit umbenannt."
+          confirmLabel="Umbenennen"
+          busy={renameBusy}
+          onCancel={() => setRenameFile(null)}
+          onConfirm={doRename}
+        />
+      )}
+
+      {/* -------------------------------------------------- Backups */}
+      {backupsFor && (
+        <BackupsModal
+          filePath={backupsFor.path}
+          fileName={backupsFor.name}
+          onClose={() => setBackupsFor(null)}
+          onRestored={() => {
+            setBackupsFor(null);
+            notify("Backup wiederhergestellt.");
+            loadSnippets();
+          }}
+          onError={fail}
+        />
+      )}
+
+      {/* -------------------------------------------------- Snippet testen */}
+      {testTrigger && (
+        <TestSnippetModal
+          trigger={testTrigger}
+          onCancel={() => setTestTrigger(null)}
+          onFire={() => fireTest(testTrigger)}
+        />
+      )}
+
       {/* -------------------------------------------------- Delete-Confirm */}
       {confirmDel && (
         <div className="overlay" onMouseDown={() => setConfirmDel(null)}>
@@ -491,6 +713,31 @@ export default function App() {
               </button>
               <button className="btn btn-danger" onClick={doDelete}>
                 Löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- Datei löschen */}
+      {confirmFileDel && (
+        <div className="overlay" onMouseDown={() => setConfirmFileDel(null)}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <h3>Datei {confirmFileDel.name}.yml löschen?</h3>
+            <div className="note">
+              <b>
+                {confirmFileDel.snippets.length} Snippet
+                {confirmFileDel.snippets.length === 1 ? "" : "s"}
+              </b>{" "}
+              werden mitgelöscht — samt der Backups dieser Datei. Das lässt sich aus der App
+              heraus nicht rückgängig machen.
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setConfirmFileDel(null)}>
+                Abbrechen
+              </button>
+              <button className="btn btn-danger" onClick={doDeleteFile}>
+                Endgültig löschen
               </button>
             </div>
           </div>

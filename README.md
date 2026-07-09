@@ -35,11 +35,18 @@ und verwaltest.
 ## Was kann die App?
 
 - ⌨️ **Snippets verwalten** — Kürzel + Ersetzungstext anlegen, bearbeiten, löschen, durchsuchen.
-- 🗂️ **Ordnung** — Snippets in mehreren Dateien gruppieren (z. B. „Arbeit", „Privat").
-- 🟢 **Ein/Aus mit einem Klick** — Status sehen, starten/stoppen/neu starten.
+- 🗂️ **Ordnung** — Snippets in mehreren Dateien gruppieren (z. B. „Arbeit", „Privat"),
+  Dateien umbenennen und löschen.
+- ▶️ **Snippet testen** — direkt aus der Liste auslösen und sehen, was ankommt.
+- ⚠️ **Doppelte Kürzel finden** — vergibst du ein Kürzel zweimal, wird nur eines ausgelöst.
+  Die App warnt dich, statt dich raten zu lassen.
+- 📅 **Bausteine** — Datum und Zwischenablage per Knopfdruck in den Text einfügen.
+- 🟢 **Ein/Aus mit einem Klick** — Status sehen, starten/stoppen/neu starten, Autostart schalten.
 - 🧩 **Paket-Hub** — fertige Snippet-Sammlungen aus der espanso-Community (Emojis, Symbole,
   Textbausteine) mit einem Klick installieren.
-- 🛡️ **Sicher** — vor jeder Änderung wird automatisch ein Backup deiner Datei angelegt.
+- 🩺 **Diagnose** — Log, Status und die typischen macOS-Stolpersteine an einer Stelle.
+- 🛡️ **Sicher** — vor jeder Änderung wird ein Backup angelegt; das Original bleibt dauerhaft
+  erhalten. Beides lässt sich in der App wiederherstellen.
 
 ---
 
@@ -188,6 +195,10 @@ Installer für alle Plattformen werden automatisch per GitHub Actions gebaut (si
 **[CC BY 4.0](LICENSE)** (Namensnennung 4.0 International) — frei nutzbar, weitergebbar und
 veränderbar, auch kommerziell, **solange du den Ersteller nennst**:
 „KI AffAIrs (Claus Zeißler)" · [affairs-consulting.de](https://www.affairs-consulting.de).
+
+**Ausgenommen sind Marke und Logo:** Die Namen „KI AffAIrs" und „SnippetAffAIrs" sowie das
+KI-AffAIrs-Logo (`src/components/Logo.tsx`, `src-tauri/icons/`) fallen nicht unter die
+Lizenz. Wenn du auf diesem Code aufbaust, ersetze sie durch dein eigenes Branding.
 
 espanso selbst steht unter GPL-3.0 und wird nur als eigenständiges Programm aufgerufen
 (nicht eingebettet).

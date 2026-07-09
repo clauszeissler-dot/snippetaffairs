@@ -69,15 +69,52 @@ Die App schreibt fremde Nutzerdateien. Deshalb gilt in `espanso.rs`:
 
 Wer diese Garantien anfasst, ergänzt einen Test in `espanso.rs`.
 
-## 4. White-Label
+## 4. Die espanso-CLI lügt über ihren Exit-Code
+
+Zwei verifizierte Fälle — beide würden sonst zu gemeldeten Erfolgen führen, die keine sind:
+
+| Befehl | Verhalten |
+|---|---|
+| `espanso --version` | Exit-Code **1**, Version steht trotzdem auf stdout |
+| `espanso match exec` | Exit-Code **0**, auch bei „unable to exec match: Worker process is not running" |
+
+Deshalb wertet `match_exec` die **Ausgabe** aus (`exec_failed`), nicht `success`. Bei neuen
+CLI-Aufrufen immer erst prüfen, was der Befehl im Fehlerfall wirklich tut — nicht annehmen,
+dass ein Exit-Code aussagekräftig ist.
+
+Auch `service check` meldet den Zustand nur im Klartext („registered as a service" /
+„… not registered …") — deshalb Textauswertung statt Exit-Code.
+
+## 5. Destruktive Datei-Operationen liegen hinter `ensure_within`
+
+`delete_match_file`, `rename_match_file`, `restore_backup` und `list_backups` prüfen über
+`ensure_within(path, match_dir())`, dass der Pfad wirklich im match-Ordner liegt (kanonisiert,
+Symlinks aufgelöst). Neue Datei-Operationen genauso absichern — auch wenn der Pfad „ja aus
+unserer eigenen UI kommt".
+
+## 6. Einfache Variablen vs. Handarbeit
+
+Der Editor kann `{{date}}` und `{{clipboard}}` einfügen; beim Speichern erzeugt das Backend
+den `vars`-Block neu. Das gilt **nur** für exakt dieses Schema (`is_simple_var`). Jede andere
+Variable — anderer Name, anderer Typ, zusätzliche Felder — macht das Match `advanced` und
+damit schreibgeschützt. Diese Grenze nicht aufweichen: dahinter liegt Handarbeit des Nutzers,
+die ein Rewrite zerstören würde.
+
+## 7. White-Label
 
 „espanso" erscheint in der UI **nur** im Installationshinweis. Sonst: „Engine",
 „Text-Expander-Engine". Auch in Fehlertexten.
 
-## 5. Tests
+## 8. Marke und Logo sind von der Lizenz ausgenommen
+
+Der Code steht unter CC BY 4.0, das Logo (`src/components/Logo.tsx`, `src-tauri/icons/`) und
+die Namen „KI AffAIrs" / „SnippetAffAIrs" nicht — siehe LICENSE. Das Monogramm ist 1:1 aus dem
+offiziellen Logopaket übernommen, nicht nachgezeichnet. Es wird nie generiert oder verändert.
+
+## 9. Tests
 
 ```bash
-cd src-tauri && cargo test   # 14 Tests: Datenintegrität + IPC-Naht
+cd src-tauri && cargo test   # 24 Tests: Datenintegrität, Pfad-Schutz, IPC-Naht
 bun run test                 # 23 Tests: Fehler-Resolver + Hub-Parser
 bun run build                # tsc + vite
 ```

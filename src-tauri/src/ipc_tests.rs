@@ -13,6 +13,21 @@ use tauri::test::{mock_builder, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
+/// Prüft NUR, ob die Argument-Namen ankommen — ohne echte Dateien anzufassen.
+///
+/// Alle Datei-Commands liegen hinter `ensure_within(match_dir())`. Ein Pfad
+/// außerhalb davon wird sauber mit einem ECB-Fehler abgelehnt; ein falscher
+/// Argument-Name dagegen mit "missing required key". Genau das unterscheiden wir.
+fn assert_args_arrive(cmd: &str, body: serde_json::Value) {
+    let err = invoke(cmd, body).expect_err("Fremdpfad muss abgelehnt werden");
+    let msg = err.as_str().unwrap_or_default();
+    assert!(
+        !msg.contains("missing required key"),
+        "{cmd}: Argument-Name kommt nicht an → {msg}"
+    );
+    assert!(msg.starts_with("ECB:"), "{cmd}: unerwarteter Fehler → {msg}");
+}
+
 fn invoke(cmd: &str, body: serde_json::Value) -> Result<serde_json::Value, serde_json::Value> {
     // Echter Builder + echter Context: dieselbe Command-Registrierung und
     // dieselbe ACL wie in der ausgelieferten App. Das native macOS-Menü wird
@@ -132,6 +147,17 @@ fn stale_delete_is_rejected_over_ipc() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// Die Datei-Commands aus v0.2.0. Sie fassen nichts an: der Fremdpfad wird von
+/// `ensure_within` abgelehnt, bevor irgendetwas passiert.
+#[test]
+fn v020_file_commands_accept_the_keys_the_frontend_sends() {
+    let outside = "/tmp/snippetaffairs_definitiv_nicht_im_match_ordner.yml";
+    assert_args_arrive("rename_match_file", json!({"filePath": outside, "newName": "neu"}));
+    assert_args_arrive("delete_match_file", json!({"filePath": outside}));
+    assert_args_arrive("list_backups", json!({"filePath": outside}));
+    assert_args_arrive("restore_backup", json!({"filePath": outside, "kind": "bak"}));
+}
+
 /// snake_case-Keys sind KEIN gültiger Payload — dieser Test hält fest, warum
 /// api.ts camelCase senden muss, damit die Konvention nicht zurückrutscht.
 #[test]
@@ -153,4 +179,16 @@ fn snake_case_keys_are_rejected() {
     );
     assert!(res.is_err(), "snake_case darf NICHT stillschweigend akzeptiert werden");
     let _ = std::fs::remove_file(&path);
+
+    // Auch bei den neuen Commands: snake_case scheitert am Argument-Namen,
+    // nicht erst an der Pfadprüfung.
+    let err = invoke(
+        "rename_match_file",
+        json!({"file_path": "/tmp/x.yml", "new_name": "y"}),
+    )
+    .expect_err("snake_case muss scheitern");
+    assert!(
+        err.as_str().unwrap_or_default().contains("missing required key"),
+        "war: {err:?}"
+    );
 }

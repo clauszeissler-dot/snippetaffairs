@@ -12,6 +12,20 @@ In short: You are free to use, share and adapt SnippetAffAIrs, including
 commercially, as long as you give appropriate credit to
 "KI AffAIrs (Claus Zeißler)" and link to https://www.affairs-consulting.de.
 
+AUSNAHME — Marke und Logo / EXCEPTION — trademark and logo:
+Der Name „KI AffAIrs", der Name „SnippetAffAIrs" sowie das KI-AffAIrs-Logo
+(u. a. src/components/Logo.tsx und src-tauri/icons/*) sind von dieser Lizenz
+AUSGENOMMEN. Sie dürfen nicht verwendet werden, um eine Verbindung zu oder eine
+Billigung durch KI AffAIrs nahezulegen. Wer den Code weiterverwendet, ersetzt
+Logo und Namen bitte durch eigene. (Vgl. auch Abschnitt 2(b)(2) der Lizenz:
+Marken- und Patentrechte werden von CC BY nicht mitlizenziert.)
+
+The names "KI AffAIrs" and "SnippetAffAIrs" and the KI AffAIrs logo (including
+src/components/Logo.tsx and src-tauri/icons/*) are EXCLUDED from this license.
+They may not be used to suggest affiliation with or endorsement by KI AffAIrs.
+If you reuse the code, please replace the logo and names with your own. (See
+also section 2(b)(2): CC BY does not license trademark or patent rights.)
+
 Voller Lizenztext / Full legal text:
 ================================================================================
 

@@ -22,6 +22,7 @@ const ECB_NOT_FOUND: &str = "AI-2011-FIND"; // Ressource fehlt (Binary, Config)
 const ECB_INPUT: &str = "AI-1955-INPUT"; // ungültige Eingabe
 const ECB_STALE: &str = "AI-2017-CTX"; // Ansicht veraltet → neu laden
 const ECB_CORE: &str = "AI-1956-CORE"; // interner Fehler / IO / Fallback
+const ECB_FLOW: &str = "AI-2016-FLOW"; // Engine-Aktion fehlgeschlagen
 
 fn ecb(code: &str, detail: impl std::fmt::Display) -> String {
     format!("ECB:{code}|{detail}")
@@ -283,6 +284,55 @@ fn match_dir() -> Option<PathBuf> {
     config_dir().map(|c| c.join("match"))
 }
 
+/// Stellt sicher, dass `path` wirklich unterhalb von `base` liegt. Schützt die
+/// destruktiven Datei-Operationen (löschen, umbenennen, wiederherstellen) davor,
+/// über `..` oder absolute Pfade aus dem match-Ordner auszubrechen.
+///
+/// Verglichen wird kanonisiert (Symlinks aufgelöst); für noch nicht existierende
+/// Ziele wird das Elternverzeichnis geprüft.
+fn ensure_within(path: &Path, base: &Path) -> Result<(), String> {
+    let base = base
+        .canonicalize()
+        .map_err(|e| ecb(ECB_CORE, format!("Basisordner nicht auflösbar: {e}")))?;
+
+    let probe = if path.exists() {
+        path.canonicalize()
+    } else {
+        // Zielpfad existiert noch nicht (rename) → Elternordner prüfen und
+        // den Dateinamen wieder anhängen.
+        let parent = path
+            .parent()
+            .ok_or_else(|| ecb(ECB_INPUT, "Ungültiger Pfad (kein Verzeichnis)"))?;
+        parent.canonicalize().map(|p| match path.file_name() {
+            Some(n) => p.join(n),
+            None => p,
+        })
+    }
+    .map_err(|e| ecb(ECB_NOT_FOUND, format!("Pfad nicht auflösbar: {e}")))?;
+
+    if probe.starts_with(&base) {
+        Ok(())
+    } else {
+        Err(ecb(
+            ECB_INPUT,
+            "Diese Datei liegt außerhalb des Snippet-Ordners.",
+        ))
+    }
+}
+
+/// Säubert einen Dateinamen zu `[a-zA-Z0-9-_]`. Leerer Rest ⇒ Fehler.
+fn safe_file_stem(name: &str) -> Result<String, String> {
+    let safe: String = name
+        .trim()
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    if safe.is_empty() {
+        return Err(ecb(ECB_INPUT, "Der Dateiname ist ungültig."));
+    }
+    Ok(safe)
+}
+
 // ---------------------------------------------------------------------------
 // YAML-IO (atomar + Backup)
 // ---------------------------------------------------------------------------
@@ -355,15 +405,130 @@ fn effective_trigger(m: &EspMatch) -> String {
     }
 }
 
-/// Ein Match, das der v1-Editor nur lesen darf. Wird sowohl für die Anzeige
+// ---------------------------------------------------------------------------
+// Einfache Variablen ({{date}} / {{clipboard}})
+//
+// Der Editor kann diese zwei Bausteine einfügen, ohne dass daraus ein
+// „erweitertes" (read-only) Match wird. Beim Speichern erzeugt das Backend den
+// passenden `vars`-Block aus den Platzhaltern im Ersetzungstext neu.
+//
+// Alles, was NICHT exakt diesem Schema entspricht (fremde vars, andere Typen,
+// zusätzliche Felder), bleibt read-only — sonst zerstört ein Speichern die
+// Handarbeit des Nutzers.
+// ---------------------------------------------------------------------------
+
+const VAR_DATE: &str = "date";
+const VAR_CLIPBOARD: &str = "clipboard";
+const DEFAULT_DATE_FORMAT: &str = "%d.%m.%Y";
+
+/// Erkennt genau die zwei von uns erzeugten Variablenformen.
+fn is_simple_var(v: &Value) -> bool {
+    let Some(map) = v.as_mapping() else {
+        return false;
+    };
+    let get = |k: &str| map.get(Value::String(k.to_string()));
+    let name = get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let vtype = get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+    match (name, vtype) {
+        (VAR_CLIPBOARD, "clipboard") => map.len() == 2,
+        (VAR_DATE, "date") => {
+            // name + type + params{format}
+            if map.len() != 3 {
+                return false;
+            }
+            let Some(params) = get("params").and_then(|v| v.as_mapping().cloned()) else {
+                return false;
+            };
+            params.len() == 1
+                && params
+                    .get(Value::String("format".into()))
+                    .and_then(|v| v.as_str())
+                    .is_some()
+        }
+        _ => false,
+    }
+}
+
+/// Trifft zu, wenn ALLE vars des Matches von uns stammen.
+fn has_only_simple_vars(m: &EspMatch) -> bool {
+    match m.extra.get("vars") {
+        None => true,
+        Some(Value::Sequence(seq)) => seq.iter().all(is_simple_var),
+        Some(_) => false,
+    }
+}
+
+/// Liest das in einem bestehenden Match hinterlegte Datumsformat, damit ein
+/// erneutes Speichern eine abweichende Nutzer-Einstellung nicht plattmacht.
+fn existing_date_format(m: &EspMatch) -> String {
+    if let Some(Value::Sequence(seq)) = m.extra.get("vars") {
+        for v in seq {
+            let Some(map) = v.as_mapping() else { continue };
+            if map.get(Value::String("name".into())).and_then(|v| v.as_str()) == Some(VAR_DATE) {
+                if let Some(f) = map
+                    .get(Value::String("params".into()))
+                    .and_then(|p| p.as_mapping())
+                    .and_then(|p| p.get(Value::String("format".into())))
+                    .and_then(|v| v.as_str())
+                {
+                    return f.to_string();
+                }
+            }
+        }
+    }
+    DEFAULT_DATE_FORMAT.to_string()
+}
+
+/// Baut den `vars`-Block aus den Platzhaltern im Ersetzungstext.
+/// Kein Platzhalter ⇒ `None` (der vars-Schlüssel wird dann entfernt).
+fn build_simple_vars(replace: &str, date_format: &str) -> Option<Value> {
+    let mut vars: Vec<Value> = Vec::new();
+
+    if replace.contains("{{date}}") {
+        let mut params = serde_yaml::Mapping::new();
+        params.insert(
+            Value::String("format".into()),
+            Value::String(date_format.to_string()),
+        );
+        let mut v = serde_yaml::Mapping::new();
+        v.insert(Value::String("name".into()), Value::String(VAR_DATE.into()));
+        v.insert(Value::String("type".into()), Value::String("date".into()));
+        v.insert(Value::String("params".into()), Value::Mapping(params));
+        vars.push(Value::Mapping(v));
+    }
+    if replace.contains("{{clipboard}}") {
+        let mut v = serde_yaml::Mapping::new();
+        v.insert(
+            Value::String("name".into()),
+            Value::String(VAR_CLIPBOARD.into()),
+        );
+        v.insert(
+            Value::String("type".into()),
+            Value::String("clipboard".into()),
+        );
+        vars.push(Value::Mapping(v));
+    }
+
+    if vars.is_empty() {
+        None
+    } else {
+        Some(Value::Sequence(vars))
+    }
+}
+
+/// Ein Match, das der Editor nur lesen darf. Wird sowohl für die Anzeige
 /// als auch als Schreibschutz im Backend genutzt (Frontend blockt zusätzlich).
+///
+/// Matches mit ausschließlich einfachen vars ({{date}}/{{clipboard}}) sind
+/// bewusst NICHT advanced — die kann der Editor gefahrlos neu schreiben.
 fn is_advanced(m: &EspMatch) -> bool {
     m.triggers.is_some()
         || m.extra.contains_key("form")
         || m.extra.contains_key("form_fields")
-        || m.extra.contains_key("vars")
         || m.extra.contains_key("image_path")
         || m.extra.contains_key("regex")
+        || (m.extra.contains_key("vars") && !has_only_simple_vars(m))
 }
 
 fn snippet_view(index: usize, m: &EspMatch) -> SnippetView {
@@ -373,22 +538,24 @@ fn snippet_view(index: usize, m: &EspMatch) -> SnippetView {
     let has_vars = m.extra.contains_key("vars");
     let has_image = m.extra.contains_key("image_path");
     let has_regex = m.extra.contains_key("regex");
+    // "advanced" = nur lesbar, um Datenverlust zu vermeiden.
+    let advanced = is_advanced(m);
 
     let kind = if has_form {
         "form"
-    } else if has_vars {
-        "vars"
     } else if has_image {
         "image"
     } else if has_regex {
         "regex"
+    } else if has_vars && advanced {
+        "vars"
+    } else if has_vars {
+        // Von uns erzeugte {{date}}/{{clipboard}}-Bausteine — editierbar.
+        "dynamisch"
     } else {
         "text"
     }
     .to_string();
-
-    // "advanced" = im v1-Editor nur lesbar, um Datenverlust zu vermeiden.
-    let advanced = is_advanced(m);
 
     let replace = match &m.replace {
         Some(r) => r.clone(),
@@ -525,16 +692,27 @@ pub fn save_snippet(
                 ));
             }
             // Nur einfache Text-Matches editieren; erweiterte bleiben unangetastet.
+            // Das Datumsformat eines bestehenden Matches wird übernommen, damit
+            // eine abweichende Nutzer-Einstellung ein Speichern überlebt.
+            let date_format = existing_date_format(m);
             m.trigger = Some(trigger);
             m.triggers = None;
-            m.replace = Some(replace);
+            m.replace = Some(replace.clone());
             m.label = if label.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
                 None
             } else {
                 label.map(|s| s.trim().to_string())
             };
+            match build_simple_vars(&replace, &date_format) {
+                Some(vars) => m.extra.insert("vars".into(), vars),
+                None => m.extra.remove("vars"),
+            };
         }
         None => {
+            let mut extra = BTreeMap::new();
+            if let Some(vars) = build_simple_vars(&replace, DEFAULT_DATE_FORMAT) {
+                extra.insert("vars".to_string(), vars);
+            }
             doc.matches.push(EspMatch {
                 trigger: Some(trigger),
                 triggers: None,
@@ -547,7 +725,7 @@ pub fn save_snippet(
                         Some(t)
                     }
                 }),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
     }
@@ -578,14 +756,7 @@ pub fn delete_snippet(
 #[tauri::command]
 pub fn create_match_file(name: String) -> Result<String, String> {
     let dir = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
-    let safe: String = name
-        .trim()
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
-        .collect();
-    if safe.is_empty() {
-        return Err(ecb(ECB_INPUT, "Der Dateiname ist ungültig."));
-    }
+    let safe = safe_file_stem(&name)?;
     let path = dir.join(format!("{safe}.yml"));
     if path.exists() {
         return Err(ecb(
@@ -596,6 +767,248 @@ pub fn create_match_file(name: String) -> Result<String, String> {
     let doc = MatchDoc::default();
     write_doc(&path, &doc)?;
     Ok(path.display().to_string())
+}
+
+/// Benennt eine Match-Datei um. Backups (.bak/.orig) wandern mit, damit die
+/// Wiederherstellung nicht ins Leere zeigt.
+#[tauri::command]
+pub fn rename_match_file(file_path: String, new_name: String) -> Result<String, String> {
+    let dir = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    let path = PathBuf::from(&file_path);
+    ensure_within(&path, &dir)?;
+
+    let safe = safe_file_stem(&new_name)?;
+    let target = path
+        .parent()
+        .ok_or_else(|| ecb(ECB_INPUT, "Ungültiger Pfad."))?
+        .join(format!("{safe}.yml"));
+    ensure_within(&target, &dir)?;
+
+    if target == path {
+        return Ok(target.display().to_string());
+    }
+    if target.exists() {
+        return Err(ecb(
+            ECB_INPUT,
+            format!("Die Datei {safe}.yml existiert bereits."),
+        ));
+    }
+    std::fs::rename(&path, &target)
+        .map_err(|e| ecb(ECB_CORE, format!("Umbenennen fehlgeschlagen: {e}")))?;
+
+    for ext in ["yml.bak", "yml.orig"] {
+        let from = path.with_extension(ext);
+        if from.exists() {
+            let _ = std::fs::rename(&from, target.with_extension(ext));
+        }
+    }
+    Ok(target.display().to_string())
+}
+
+/// Löscht eine Match-Datei samt ihrer Backups.
+#[tauri::command]
+pub fn delete_match_file(file_path: String) -> Result<(), String> {
+    let dir = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    let path = PathBuf::from(&file_path);
+    ensure_within(&path, &dir)?;
+    if !path.exists() {
+        return Err(stale_err());
+    }
+    std::fs::remove_file(&path)
+        .map_err(|e| ecb(ECB_CORE, format!("Löschen fehlgeschlagen: {e}")))?;
+    for ext in ["yml.bak", "yml.orig"] {
+        let _ = std::fs::remove_file(path.with_extension(ext));
+    }
+    Ok(())
+}
+
+// ---- Trigger-Kollisionen -----------------------------------------------------
+
+#[derive(Serialize)]
+pub struct ConflictSite {
+    /// Anzeigename der Quelle: Dateiname bzw. "Paket: <name>".
+    pub source: String,
+    pub file_path: String,
+    pub index: usize,
+}
+
+#[derive(Serialize)]
+pub struct TriggerConflict {
+    pub trigger: String,
+    pub sites: Vec<ConflictSite>,
+}
+
+/// Sammelt alle Match-Dateien inkl. `packages/`, denn auch ein Hub-Paket kann
+/// einen Trigger belegen, den der Nutzer selbst vergibt.
+fn all_match_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for p in entries.flatten().map(|e| e.path()) {
+            if p.is_dir() {
+                stack.push(p);
+            } else if p
+                .extension()
+                .map(|x| x == "yml" || x == "yaml")
+                .unwrap_or(false)
+            {
+                out.push(p);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Bezeichnung der Quelle für die Anzeige: Paketname, sonst Dateiname.
+fn source_label(path: &Path, match_root: &Path) -> String {
+    let rel = path.strip_prefix(match_root).unwrap_or(path);
+    let parts: Vec<_> = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect();
+    if parts.len() >= 2 && parts[0] == "packages" {
+        format!("Paket: {}", parts[1])
+    } else {
+        path.file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| rel.display().to_string())
+    }
+}
+
+/// Findet Trigger, die mehrfach vergeben sind. Solche Doppelungen sind still:
+/// espanso expandiert nur eines der Matches, ohne zu warnen.
+#[tauri::command]
+pub fn trigger_conflicts() -> Result<Vec<TriggerConflict>, String> {
+    let dir = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    Ok(conflicts_in(&dir))
+}
+
+fn conflicts_in(dir: &Path) -> Vec<TriggerConflict> {
+    let mut by_trigger: BTreeMap<String, Vec<ConflictSite>> = BTreeMap::new();
+
+    for path in all_match_files(dir) {
+        // Unlesbare Fremddateien dürfen die Prüfung nicht abbrechen.
+        let Ok(doc) = read_doc(&path) else { continue };
+        for (index, m) in doc.matches.iter().enumerate() {
+            // Ein Match kann mehrere Trigger tragen — jeder zählt einzeln.
+            let triggers: Vec<String> = match (&m.trigger, &m.triggers) {
+                (Some(t), _) => vec![t.clone()],
+                (None, Some(ts)) => ts.clone(),
+                _ => continue,
+            };
+            for t in triggers {
+                by_trigger.entry(t).or_default().push(ConflictSite {
+                    source: source_label(&path, dir),
+                    file_path: path.display().to_string(),
+                    index,
+                });
+            }
+        }
+    }
+
+    by_trigger
+        .into_iter()
+        .filter(|(_, sites)| sites.len() > 1)
+        .map(|(trigger, sites)| TriggerConflict { trigger, sites })
+        .collect()
+}
+
+// ---- Backups -----------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct BackupInfo {
+    /// "bak" = letzter Stand vor der jüngsten Änderung, "orig" = Original.
+    pub kind: String,
+    pub path: String,
+    pub size: u64,
+    /// Unix-Sekunden; 0 wenn nicht ermittelbar.
+    pub modified: u64,
+    pub snippet_count: usize,
+}
+
+fn backup_kinds(path: &Path) -> [(&'static str, PathBuf); 2] {
+    [
+        ("bak", path.with_extension("yml.bak")),
+        ("orig", path.with_extension("yml.orig")),
+    ]
+}
+
+#[tauri::command]
+pub fn list_backups(file_path: String) -> Result<Vec<BackupInfo>, String> {
+    let dir = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    let path = PathBuf::from(&file_path);
+    ensure_within(&path, &dir)?;
+
+    let mut out = Vec::new();
+    for (kind, bpath) in backup_kinds(&path) {
+        if !bpath.exists() {
+            continue;
+        }
+        let meta = std::fs::metadata(&bpath).ok();
+        let modified = meta
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        // Kaputte Backups gar nicht erst zum Wiederherstellen anbieten.
+        let Ok(doc) = read_doc(&bpath) else { continue };
+        out.push(BackupInfo {
+            kind: kind.to_string(),
+            path: bpath.display().to_string(),
+            size: meta.map(|m| m.len()).unwrap_or(0),
+            modified,
+            snippet_count: doc.matches.len(),
+        });
+    }
+    Ok(out)
+}
+
+/// Spielt ein Backup zurück. Der aktuelle Stand wandert vorher nach `.yml.bak`,
+/// der Rückweg bleibt also offen. Kopiert roh (kein Reserialisieren), damit die
+/// Kommentare aus `.yml.orig` erhalten bleiben.
+#[tauri::command]
+pub fn restore_backup(file_path: String, kind: String) -> Result<(), String> {
+    let dir = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    let path = PathBuf::from(&file_path);
+    ensure_within(&path, &dir)?;
+    restore_from(&path, &kind)
+}
+
+fn restore_from(path: &Path, kind: &str) -> Result<(), String> {
+    let (_, source) = backup_kinds(path)
+        .into_iter()
+        .find(|(k, _)| *k == kind)
+        .ok_or_else(|| ecb(ECB_INPUT, "Unbekannte Backup-Art."))?;
+    if !source.exists() {
+        return Err(ecb(ECB_NOT_FOUND, "Dieses Backup existiert nicht (mehr)."));
+    }
+
+    // 1) Inhalt lesen und validieren, BEVOR irgendetwas überschrieben wird.
+    let content = std::fs::read_to_string(&source)
+        .map_err(|e| ecb(ECB_CORE, format!("Backup nicht lesbar: {e}")))?;
+    serde_yaml::from_str::<MatchDoc>(&content).map_err(|e| {
+        ecb(
+            ECB_CORE,
+            format!("Das Backup ist beschädigt, Wiederherstellung abgebrochen: {e}"),
+        )
+    })?;
+
+    // 2) Aktuellen Stand sichern (überschreibt .yml.bak — auch wenn genau das
+    //    gerade die Quelle ist; deshalb liegt der Inhalt oben schon im Speicher).
+    if path.exists() {
+        std::fs::copy(&path, path.with_extension("yml.bak"))
+            .map_err(|e| ecb(ECB_CORE, format!("Sicherung fehlgeschlagen: {e}")))?;
+    }
+
+    // 3) Atomar zurückschreiben.
+    let tmp = path.with_extension("yml.restore.tmp");
+    std::fs::write(&tmp, content.as_bytes())
+        .map_err(|e| ecb(ECB_CORE, format!("Schreiben fehlgeschlagen: {e}")))?;
+    std::fs::rename(&tmp, &path)
+        .map_err(|e| ecb(ECB_CORE, format!("Atomares Umbenennen fehlgeschlagen: {e}")))?;
+    Ok(())
 }
 
 // ---- Service -----------------------------------------------------------------
@@ -621,6 +1034,93 @@ pub fn service_stop() -> Result<CmdResult, String> {
 #[tauri::command]
 pub fn service_restart() -> Result<CmdResult, String> {
     run_espanso(&["restart"])
+}
+
+/// Autostart beim Systemstart. `service check` meldet den Zustand im Klartext
+/// („registered as a service" / „… not registered …"), deshalb wird der Text
+/// ausgewertet und nicht der Exit-Code.
+#[tauri::command]
+pub fn autostart_enabled() -> bool {
+    match run_espanso(&["service", "check"]) {
+        Ok(r) => {
+            let out = r.output.to_lowercase();
+            out.contains("registered") && !out.contains("not registered")
+        }
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+pub fn autostart_enable() -> Result<CmdResult, String> {
+    run_espanso(&["service", "register"])
+}
+
+#[tauri::command]
+pub fn autostart_disable() -> Result<CmdResult, String> {
+    run_espanso(&["service", "unregister"])
+}
+
+// ---- Snippet testen ----------------------------------------------------------
+
+/// `match exec` beendet sich auch im Fehlerfall mit Exit-Code 0 und schreibt
+/// die Ursache nur nach stdout (z. B. „unable to exec match: Worker process is
+/// not running"). Auf `success` allein zu vertrauen, meldete einen Erfolg, den
+/// es nicht gab — deshalb wird die Ausgabe ausgewertet.
+fn exec_failed(r: &CmdResult) -> bool {
+    if !r.success {
+        return true;
+    }
+    let out = r.output.to_lowercase();
+    out.contains("unable to") || out.contains("error")
+}
+
+/// Expandiert ein Snippet sofort — der Text landet im gerade aktiven Fenster.
+#[tauri::command]
+pub fn match_exec(trigger: String) -> Result<CmdResult, String> {
+    let trigger = trigger.trim();
+    if trigger.is_empty() {
+        return Err(ecb(ECB_INPUT, "Kein Trigger angegeben."));
+    }
+    let r = run_espanso(&["match", "exec", "--trigger", trigger])?;
+    if exec_failed(&r) {
+        return Err(ecb(ECB_FLOW, r.output));
+    }
+    Ok(r)
+}
+
+// ---- Diagnose ----------------------------------------------------------------
+
+/// Rohes Log der Engine — die erste Anlaufstelle, wenn nichts expandiert.
+#[tauri::command]
+pub fn engine_log() -> Result<CmdResult, String> {
+    run_espanso(&["log"])
+}
+
+/// macOS: „Secure Input" blockiert die Texteingabe global (typisch nach einem
+/// Passwort-Dialog). espanso bringt dafür einen eigenen Workaround mit.
+#[tauri::command]
+pub fn fix_secure_input() -> Result<CmdResult, String> {
+    run_espanso(&["workaround", "secure-input"])
+}
+
+/// macOS: Systemeinstellungen → Bedienungshilfen öffnen. Ohne diese Freigabe
+/// startet der espanso-Worker nicht („start: timed out").
+#[tauri::command]
+pub fn open_accessibility_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = Command::new("open");
+        cmd.arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+        no_window(&mut cmd);
+        cmd.spawn()
+            .map_err(|e| ecb(ECB_CORE, format!("Systemeinstellungen nicht zu öffnen: {e}")))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err(ecb(
+        ECB_INPUT,
+        "Diese Einstellung gibt es nur unter macOS.",
+    ))
 }
 
 // ---- Pakete ------------------------------------------------------------------
@@ -857,6 +1357,243 @@ mod tests {
         assert_eq!(doc.matches[0].replace.as_deref(), Some("42"));
         assert_eq!(doc.matches[1].trigger.as_deref(), Some("true"));
         assert_eq!(doc.matches[1].replace.as_deref(), Some("3.5"));
+    }
+
+    // ---- Einfache Variablen ------------------------------------------------
+
+    #[test]
+    fn simple_vars_are_editable_foreign_vars_are_not() {
+        // Von uns erzeugt → editierbar.
+        let ours: MatchDoc = serde_yaml::from_str(
+            "matches:\n  - trigger: \":d\"\n    replace: \"{{date}}\"\n    vars:\n      - name: date\n        type: date\n        params:\n          format: \"%d.%m.%Y\"\n",
+        )
+        .unwrap();
+        assert!(!is_advanced(&ours.matches[0]), "eigene vars sind editierbar");
+        assert_eq!(snippet_view(0, &ours.matches[0]).kind, "dynamisch");
+
+        // Handarbeit des Nutzers (shell/script/andere Namen) → read-only.
+        for yaml in [
+            "matches:\n  - trigger: \":s\"\n    replace: \"{{out}}\"\n    vars:\n      - name: out\n        type: shell\n        params:\n          cmd: \"date\"\n",
+            "matches:\n  - trigger: \":d\"\n    replace: \"{{mydate}}\"\n    vars:\n      - name: mydate\n        type: date\n        params:\n          format: \"%Y\"\n",
+            // richtiger Name, aber zusätzliches Feld → nicht unser Schema
+            "matches:\n  - trigger: \":c\"\n    replace: \"{{clipboard}}\"\n    vars:\n      - name: clipboard\n        type: clipboard\n        inject: true\n",
+        ] {
+            let doc: MatchDoc = serde_yaml::from_str(yaml).unwrap();
+            assert!(
+                is_advanced(&doc.matches[0]),
+                "fremde vars müssen read-only bleiben: {yaml}"
+            );
+        }
+    }
+
+    #[test]
+    fn saving_builds_and_removes_simple_vars() {
+        let path = tmp_path("simplevars");
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, "matches: []\n").unwrap();
+        let p = path.display().to_string();
+
+        // Anlegen mit beiden Platzhaltern → vars entstehen.
+        save_snippet(p.clone(), None, ":x".into(), "{{date}} — {{clipboard}}".into(), None, None)
+            .unwrap();
+        let doc = read_doc(&path).unwrap();
+        let Some(Value::Sequence(vars)) = doc.matches[0].extra.get("vars") else {
+            panic!("vars fehlen");
+        };
+        assert_eq!(vars.len(), 2);
+        assert!(!is_advanced(&doc.matches[0]), "bleibt editierbar");
+
+        // Platzhalter entfernen → vars verschwinden wieder (kein Leichenblock).
+        save_snippet(p.clone(), Some(0), ":x".into(), "nur Text".into(), None, Some(":x".into()))
+            .unwrap();
+        let doc = read_doc(&path).unwrap();
+        assert!(!doc.matches[0].extra.contains_key("vars"), "vars müssen weg sein");
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("yml.bak"));
+        let _ = std::fs::remove_file(path.with_extension("yml.orig"));
+    }
+
+    #[test]
+    fn saving_keeps_custom_date_format() {
+        // Der Nutzer hat das Format von Hand auf ISO gestellt — ein Speichern
+        // über die GUI darf das nicht auf den Default zurücksetzen.
+        let path = tmp_path("dateformat");
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(
+            &path,
+            "matches:\n  - trigger: \":d\"\n    replace: \"{{date}}\"\n    vars:\n      - name: date\n        type: date\n        params:\n          format: \"%Y-%m-%d\"\n",
+        )
+        .unwrap();
+
+        save_snippet(
+            path.display().to_string(),
+            Some(0),
+            ":d".into(),
+            "Heute: {{date}}".into(),
+            None,
+            Some(":d".into()),
+        )
+        .unwrap();
+
+        let doc = read_doc(&path).unwrap();
+        assert_eq!(existing_date_format(&doc.matches[0]), "%Y-%m-%d");
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("yml.bak"));
+        let _ = std::fs::remove_file(path.with_extension("yml.orig"));
+    }
+
+    // ---- Pfad-Schutz --------------------------------------------------------
+
+    #[test]
+    fn ensure_within_blocks_traversal() {
+        let base = std::env::temp_dir().join("snippetaffairs_base");
+        let sub = base.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        let inside = base.join("ok.yml");
+        std::fs::write(&inside, "matches: []\n").unwrap();
+
+        assert!(ensure_within(&inside, &base).is_ok());
+        assert!(ensure_within(&sub.join("neu.yml"), &base).is_ok(), "noch nicht existent, aber drin");
+
+        // Ausbruch per ..
+        let outside = base.join("../snippetaffairs_escape.yml");
+        std::fs::write(std::env::temp_dir().join("snippetaffairs_escape.yml"), "x").unwrap();
+        let err = ensure_within(&outside, &base).unwrap_err();
+        assert!(err.starts_with("ECB:AI-1955-INPUT|"), "war: {err}");
+
+        // Absoluter Fremdpfad
+        assert!(ensure_within(Path::new("/etc/hosts"), &base).is_err());
+
+        let _ = std::fs::remove_file(&inside);
+        let _ = std::fs::remove_file(std::env::temp_dir().join("snippetaffairs_escape.yml"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn safe_file_stem_sanitizes() {
+        assert_eq!(safe_file_stem(" meine snippets ").unwrap(), "meine-snippets");
+        assert_eq!(safe_file_stem("../../etc/passwd").unwrap(), "------etc-passwd");
+        assert!(safe_file_stem("   ").is_err());
+    }
+
+    // ---- Trigger-Kollisionen ------------------------------------------------
+
+    #[test]
+    fn conflicts_across_files_and_packages() {
+        let dir = std::env::temp_dir().join("snippetaffairs_conflicts");
+        let pkg = dir.join("packages").join("emoji-pack");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&pkg).unwrap();
+
+        std::fs::write(
+            dir.join("base.yml"),
+            "matches:\n  - trigger: \":hi\"\n    replace: \"Hallo\"\n  - trigger: \":ok\"\n    replace: \"Okay\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("arbeit.yml"),
+            "matches:\n  - trigger: \":hi\"\n    replace: \"Guten Tag\"\n",
+        )
+        .unwrap();
+        // Auch ein Hub-Paket kann einen Trigger belegen.
+        std::fs::write(
+            pkg.join("package.yml"),
+            "matches:\n  - triggers: [\":ok\", \":yes\"]\n    replace: \"👍\"\n",
+        )
+        .unwrap();
+
+        let conflicts = conflicts_in(&dir);
+        let names: Vec<_> = conflicts.iter().map(|c| c.trigger.as_str()).collect();
+        assert_eq!(names, vec![":hi", ":ok"], "nur echte Doppelungen");
+
+        let hi = &conflicts[0];
+        assert_eq!(hi.sites.len(), 2);
+        let sources: Vec<_> = hi.sites.iter().map(|s| s.source.as_str()).collect();
+        assert!(sources.contains(&"arbeit") && sources.contains(&"base"));
+
+        // Der Paket-Treffer wird als Paket ausgewiesen, nicht als Dateiname.
+        let ok = &conflicts[1];
+        assert!(ok.sites.iter().any(|s| s.source == "Paket: emoji-pack"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- Backup-Wiederherstellung -------------------------------------------
+
+    #[test]
+    fn restore_swaps_current_and_backup_and_keeps_comments() {
+        let path = tmp_path("restore");
+        let bak = path.with_extension("yml.bak");
+        let orig = path.with_extension("yml.orig");
+        for f in [&path, &bak, &orig] {
+            let _ = std::fs::remove_file(f);
+        }
+
+        let original = "# handgepflegt\nmatches:\n  - trigger: \":alt\"\n    replace: \"Alt\"\n";
+        std::fs::write(&path, original).unwrap();
+
+        // Eine GUI-Änderung: legt .orig + .bak an.
+        let mut doc = read_doc(&path).unwrap();
+        doc.matches.push(EspMatch {
+            trigger: Some(":neu".into()),
+            replace: Some("Neu".into()),
+            ..Default::default()
+        });
+        write_doc(&path, &doc).unwrap();
+        assert!(orig.exists() && bak.exists());
+
+        // .orig zurückspielen → Kommentar ist wieder da, aktueller Stand liegt im .bak.
+        restore_from(&path, "orig").unwrap();
+        let restored = std::fs::read_to_string(&path).unwrap();
+        assert!(restored.contains("# handgepflegt"), "Kommentar muss zurückkommen");
+        assert!(!restored.contains(":neu"));
+        assert!(
+            std::fs::read_to_string(&bak).unwrap().contains(":neu"),
+            "der überschriebene Stand muss im .bak liegen (Rückweg offen)"
+        );
+
+        // Und wieder vorwärts.
+        restore_from(&path, "bak").unwrap();
+        assert!(std::fs::read_to_string(&path).unwrap().contains(":neu"));
+
+        for f in [&path, &bak, &orig] {
+            let _ = std::fs::remove_file(f);
+        }
+    }
+
+    #[test]
+    fn restore_refuses_corrupt_backup() {
+        let path = tmp_path("corrupt");
+        let bak = path.with_extension("yml.bak");
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, "matches: []\n").unwrap();
+        std::fs::write(&bak, "matches: [\n").unwrap(); // kaputt
+
+        let err = restore_from(&path, "bak").unwrap_err();
+        assert!(err.starts_with("ECB:AI-1956-CORE|"), "war: {err}");
+        // Die intakte Datei darf nicht angefasst worden sein.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "matches: []\n");
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&bak);
+    }
+
+    #[test]
+    fn exec_failure_is_detected_despite_exit_zero() {
+        // Verifiziertes Verhalten von espanso 2.3.0: Exit-Code 0, Fehler nur im Text.
+        let failed = CmdResult {
+            success: true,
+            output: "unable to exec match: Worker process is not running, please start Espanso first.".into(),
+        };
+        assert!(exec_failed(&failed), "Fehlertext muss als Fehler gelten");
+
+        let ok = CmdResult { success: true, output: String::new() };
+        assert!(!exec_failed(&ok));
+
+        let hard = CmdResult { success: false, output: String::new() };
+        assert!(exec_failed(&hard));
     }
 
     #[test]

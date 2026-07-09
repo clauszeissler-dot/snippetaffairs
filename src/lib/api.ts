@@ -28,6 +28,26 @@ export interface CmdResult {
   output: string;
 }
 
+export interface ConflictSite {
+  source: string;
+  file_path: string;
+  index: number;
+}
+
+export interface TriggerConflict {
+  trigger: string;
+  sites: ConflictSite[];
+}
+
+export interface BackupInfo {
+  kind: "bak" | "orig";
+  path: string;
+  size: number;
+  /** Unix-Sekunden, 0 wenn unbekannt. */
+  modified: number;
+  snippet_count: number;
+}
+
 export const api = {
   info: () => invoke<EspansoInfo>("get_espanso_info"),
   listSnippets: () => invoke<FileGroup[]>("list_snippets"),
@@ -49,10 +69,30 @@ export const api = {
   deleteSnippet: (filePath: string, index: number, expectedTrigger: string) =>
     invoke<void>("delete_snippet", { filePath, index, expectedTrigger }),
   createMatchFile: (name: string) => invoke<string>("create_match_file", { name }),
+  renameMatchFile: (filePath: string, newName: string) =>
+    invoke<string>("rename_match_file", { filePath, newName }),
+  deleteMatchFile: (filePath: string) => invoke<void>("delete_match_file", { filePath }),
+
+  triggerConflicts: () => invoke<TriggerConflict[]>("trigger_conflicts"),
+  listBackups: (filePath: string) => invoke<BackupInfo[]>("list_backups", { filePath }),
+  restoreBackup: (filePath: string, kind: "bak" | "orig") =>
+    invoke<void>("restore_backup", { filePath, kind }),
+
   serviceStatus: () => invoke<CmdResult>("service_status"),
   serviceStart: () => invoke<CmdResult>("service_start"),
   serviceStop: () => invoke<CmdResult>("service_stop"),
   serviceRestart: () => invoke<CmdResult>("service_restart"),
+
+  autostartEnabled: () => invoke<boolean>("autostart_enabled"),
+  autostartEnable: () => invoke<CmdResult>("autostart_enable"),
+  autostartDisable: () => invoke<CmdResult>("autostart_disable"),
+
+  /** Expandiert das Snippet im gerade aktiven Fenster. */
+  matchExec: (trigger: string) => invoke<CmdResult>("match_exec", { trigger }),
+
+  engineLog: () => invoke<CmdResult>("engine_log"),
+  fixSecureInput: () => invoke<CmdResult>("fix_secure_input"),
+  openAccessibilitySettings: () => invoke<void>("open_accessibility_settings"),
   packageList: () => invoke<CmdResult>("package_list"),
   packageInstall: (name: string) => invoke<CmdResult>("package_install", { name }),
   packageUninstall: (name: string) => invoke<CmdResult>("package_uninstall", { name }),
