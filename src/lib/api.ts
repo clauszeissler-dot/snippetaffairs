@@ -31,15 +31,23 @@ export interface CmdResult {
 export const api = {
   info: () => invoke<EspansoInfo>("get_espanso_info"),
   listSnippets: () => invoke<FileGroup[]>("list_snippets"),
+  // ACHTUNG Argument-Namen: `#[tauri::command]` erwartet sie in camelCase
+  // (`filePath`), obwohl die Rust-Signatur `file_path` heißt. snake_case wird
+  // zur Laufzeit mit "missing required key" abgelehnt — nicht beim Build.
+  // Abgesichert durch src-tauri/src/ipc_tests.rs.
+  //
+  // expectedTrigger = was die UI an dieser Position anzeigt. Das Backend bricht
+  // ab, wenn die Datei zwischenzeitlich extern geändert wurde (Staleness-Guard).
   saveSnippet: (args: {
-    file_path: string;
+    filePath: string;
     index: number | null;
     trigger: string;
     replace: string;
     label: string | null;
+    expectedTrigger: string | null;
   }) => invoke<void>("save_snippet", args),
-  deleteSnippet: (file_path: string, index: number) =>
-    invoke<void>("delete_snippet", { file_path, index }),
+  deleteSnippet: (filePath: string, index: number, expectedTrigger: string) =>
+    invoke<void>("delete_snippet", { filePath, index, expectedTrigger }),
   createMatchFile: (name: string) => invoke<string>("create_match_file", { name }),
   serviceStatus: () => invoke<CmdResult>("service_status"),
   serviceStart: () => invoke<CmdResult>("service_start"),

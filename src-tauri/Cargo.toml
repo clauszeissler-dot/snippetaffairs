@@ -1,6 +1,6 @@
 [package]
 name = "snippetaffairs"
-version = "0.1.0"
+version = "0.1.1"
 description = "SnippetAffAIrs — Text-Expander-GUI (espanso) im KI-AffAIrs-Design"
 authors = ["KI AffAIrs (Claus Zeißler)"]
 license = "CC-BY-4.0"
@@ -25,3 +25,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 
+
+[dev-dependencies]
+# "test" liefert mock_builder + INVOKE_KEY: erlaubt echte IPC-Calls im Test,
+# damit die Naht Frontend→Command (Argument-Namen!) verifiziert wird.
+tauri = { version = "2", features = ["test"] }

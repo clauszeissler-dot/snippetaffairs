@@ -1,20 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { fetchHubIndex, fetchManifest, type HubPackage } from "../lib/hub";
+import { AppError } from "../lib/errors";
+import {
+  fetchHubIndex,
+  fetchManifest,
+  parseInstalledPackages,
+  type HubPackage,
+} from "../lib/hub";
 
 interface Props {
   notify: (msg: string, kind?: "ok" | "err") => void;
+  onError: (e: unknown, retry?: () => void) => void;
   onChanged: () => void; // nach install/uninstall Snippets neu laden
 }
 
 const PAGE = 45;
 
-export default function HubBrowser({ notify, onChanged }: Props) {
+export default function HubBrowser({ notify, onError, onChanged }: Props) {
   const [index, setIndex] = useState<HubPackage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [query, setQuery] = useState("");
-  const [installedRaw, setInstalledRaw] = useState("");
+  const [installed, setInstalled] = useState<Map<string, string>>(new Map());
   const [busyPkg, setBusyPkg] = useState<string | null>(null);
   const details = useRef<Map<string, Partial<HubPackage>>>(new Map());
   const [, force] = useState(0);
@@ -22,9 +29,10 @@ export default function HubBrowser({ notify, onChanged }: Props) {
   async function loadInstalled() {
     try {
       const r = await api.packageList();
-      setInstalledRaw(r.output || "");
+      setInstalled(parseInstalledPackages(r.output || ""));
     } catch {
-      /* egal */
+      // Kein Blocker: ohne Liste fehlt nur die „installiert"-Markierung.
+      setInstalled(new Map());
     }
   }
 
@@ -35,8 +43,8 @@ export default function HubBrowser({ notify, onChanged }: Props) {
         const idx = await fetchHubIndex();
         setIndex(idx);
         setError(null);
-      } catch (e: any) {
-        setError(String(e?.message ?? e));
+      } catch (e) {
+        setError(e);
       } finally {
         setLoading(false);
       }
@@ -55,7 +63,7 @@ export default function HubBrowser({ notify, onChanged }: Props) {
         )
       : index;
     return base.slice(0, PAGE);
-  }, [query, index, installedRaw]);
+  }, [query, index]);
 
   // Lazy-Details für die sichtbaren Karten nachladen
   useEffect(() => {
@@ -75,23 +83,18 @@ export default function HubBrowser({ notify, onChanged }: Props) {
     };
   }, [filtered]);
 
-  function isInstalled(name: string): boolean {
-    const re = new RegExp(`(^|[^a-z0-9-])${name}([^a-z0-9-]|$)`, "i");
-    return re.test(installedRaw);
-  }
+
 
   async function doInstall(name: string) {
     setBusyPkg(name);
     try {
       const r = await api.packageInstall(name);
-      notify(
-        r.success ? `Paket „${name}" installiert.` : `Fehler: ${r.output}`,
-        r.success ? "ok" : "err"
-      );
+      if (!r.success) throw new AppError("AI-2016-FLOW", r.output);
+      notify(`Paket „${name}" installiert.`);
       await loadInstalled();
       onChanged();
-    } catch (e: any) {
-      notify(String(e), "err");
+    } catch (e) {
+      onError(e, () => doInstall(name));
     } finally {
       setBusyPkg(null);
     }
@@ -101,14 +104,12 @@ export default function HubBrowser({ notify, onChanged }: Props) {
     setBusyPkg(name);
     try {
       const r = await api.packageUninstall(name);
-      notify(
-        r.success ? `Paket „${name}" entfernt.` : `Fehler: ${r.output}`,
-        r.success ? "ok" : "err"
-      );
+      if (!r.success) throw new AppError("AI-2016-FLOW", r.output);
+      notify(`Paket „${name}" entfernt.`);
       await loadInstalled();
       onChanged();
-    } catch (e: any) {
-      notify(String(e), "err");
+    } catch (e) {
+      onError(e, () => doUninstall(name));
     } finally {
       setBusyPkg(null);
     }
@@ -132,9 +133,10 @@ export default function HubBrowser({ notify, onChanged }: Props) {
         </span>
       </div>
 
-      {error && (
+      {error != null && (
         <div className="banner">
-          <b>Hub nicht erreichbar.</b> {error}
+          <b>Hub nicht erreichbar.</b>{" "}
+          {error instanceof Error ? error.message : String(error)}
         </div>
       )}
 
@@ -149,7 +151,7 @@ export default function HubBrowser({ notify, onChanged }: Props) {
         <div className="hub-grid">
           {filtered.map((p) => {
             const d = details.current.get(p.name) ?? {};
-            const installed = isInstalled(p.name);
+            const isInstalled = installed.has(p.name);
             const busy = busyPkg === p.name;
             return (
               <div className="card pkg" key={p.name}>
@@ -171,9 +173,12 @@ export default function HubBrowser({ notify, onChanged }: Props) {
                   </div>
                 )}
                 <div className="pkg-foot">
-                  {installed ? (
+                  {isInstalled ? (
                     <>
-                      <span className="pkg-installed">✓ installiert</span>
+                      <span className="pkg-installed">
+                        ✓ installiert
+                        {installed.get(p.name) ? ` · v${installed.get(p.name)}` : ""}
+                      </span>
                       <div className="spacer" style={{ flex: 1 }} />
                       <button
                         className="btn btn-danger btn-sm"

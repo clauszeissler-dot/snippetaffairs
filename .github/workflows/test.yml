@@ -1,0 +1,60 @@
+name: Tests
+
+# Läuft bei jedem Push/PR auf main. Prüft die Datenintegritäts-Garantien
+# (kein Verlust beim Schreiben fremder YAML-Dateien) und die IPC-Naht
+# Frontend→Command, die sonst erst zur Laufzeit bricht.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS ist Pflicht: dort erzwingt das native Menü Sonderbehandlung
+        # in den IPC-Tests (mock_builder schaltet es ab).
+        platform: [ubuntu-22.04, macos-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bun einrichten
+        uses: oven-sh/setup-bun@v2
+
+      - name: Rust (stable) einrichten
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust-Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Linux-Systemabhängigkeiten
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libssl-dev \
+            build-essential
+
+      - name: Frontend-Abhängigkeiten
+        run: bun install
+
+      - name: Frontend-Tests (Fehler-Resolver, Hub-Parser)
+        run: bun run test
+
+      - name: Typecheck + Build
+        run: bun run build
+
+      - name: Rust-Tests (Datenintegrität + IPC-Naht)
+        working-directory: ./src-tauri
+        run: cargo test

@@ -619,3 +619,43 @@ h3 {
     transform: rotate(360deg);
   }
 }
+
+/* Fehlerdialog (errorcodebase) */
+.error-modal h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.error-modal .err-icon {
+  font-size: 20px;
+}
+.error-modal.sev-error {
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.error-modal.sev-warning {
+  box-shadow: 0 0 40px rgba(244, 119, 0, 0.18);
+  border-color: rgba(244, 119, 0, 0.4);
+}
+.err-message {
+  font-size: 14px;
+  color: var(--ki-text-2);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+.err-detail {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 140px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+.err-reference {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ki-muted);
+  letter-spacing: 0.5px;
+  user-select: all;
+}

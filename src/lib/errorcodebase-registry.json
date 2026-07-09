@@ -1,0 +1,638 @@
+{
+  "version": "0.2.0",
+  "generatedFrom": "src/registry.ts",
+  "count": 19,
+  "codes": [
+    {
+      "code": "AI-1956-CORE",
+      "internal": "INTERNAL_UNKNOWN",
+      "category": "CORE",
+      "httpStatus": 500,
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 1956,
+        "title": "Dartmouth-Konferenz",
+        "blurb": "Auf der Dartmouth-Konferenz 1956 wurde der Begriff „Artificial Intelligence“ geprägt — die Geburtsstunde des Forschungsfeldes.",
+        "sourceUrl": "https://home.dartmouth.edu/about/artificial-intelligence-ai-coined-dartmouth"
+      },
+      "i18n": {
+        "de": {
+          "title": "Etwas Grundlegendes ist schiefgelaufen.",
+          "message": "1956 begann auf der Dartmouth-Konferenz die Geschichte der KI. Bei uns hat gerade etwas Grundlegendes nicht funktioniert. Der Fehler wurde erfasst und kann gemeldet werden.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Something fundamental went wrong.",
+          "message": "In 1956, the Dartmouth workshop kicked off the history of AI. Right now something fundamental didn’t work on our side. The error was logged and can be reported.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1966-CHAT",
+      "internal": "CHAT_FAILED",
+      "category": "CHAT",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 1966,
+        "title": "ELIZA",
+        "blurb": "ELIZA, 1966 von Joseph Weizenbaum am MIT vorgestellt, gilt als einer der ersten Chatbots.",
+        "sourceUrl": "https://dl.acm.org/doi/10.1145/365153.365168"
+      },
+      "i18n": {
+        "de": {
+          "title": "Die Nachricht kam nicht durch.",
+          "message": "1966 zeigte ELIZA am MIT zum ersten Mal, wie sich ein Gespräch mit einer Maschine anfühlt. Deine Nachricht ist gerade nicht durchgekommen — versuch es bitte noch einmal.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Your message didn’t get through.",
+          "message": "In 1966, ELIZA at MIT first showed what a conversation with a machine feels like. Your message just didn’t get through — please try again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1997-CALC",
+      "internal": "COMPUTATION_FAILED",
+      "category": "CALC",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 1997,
+        "title": "Deep Blue",
+        "blurb": "1997 besiegte IBMs Deep Blue den amtierenden Schachweltmeister Garry Kasparov.",
+        "sourceUrl": "https://www.ibm.com/history/deep-blue"
+      },
+      "i18n": {
+        "de": {
+          "title": "Die Berechnung ging daneben.",
+          "message": "1997 schlug Deep Blue Schachweltmeister Kasparow — ein Symbol für Maschinen-Rechenkraft. Unsere Berechnung ist gerade nicht aufgegangen. Bitte erneut versuchen.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "The calculation didn’t work out.",
+          "message": "In 1997, Deep Blue beat world chess champion Kasparov — a symbol of machine compute. Our calculation just didn’t add up. Please try again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2012-VISION",
+      "internal": "MEDIA_ANALYSIS_FAILED",
+      "category": "VISION",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2012,
+        "title": "AlexNet",
+        "blurb": "2012 sorgte AlexNet auf ImageNet für den Durchbruch des Deep Learning in der Bilderkennung.",
+        "sourceUrl": "https://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks"
+      },
+      "i18n": {
+        "de": {
+          "title": "Die Datei konnte nicht verarbeitet werden.",
+          "message": "2012 brachte AlexNet Computern das Sehen bei. Deine Datei konnten wir gerade nicht analysieren — prüfe Format und Größe und versuch es erneut.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "The file couldn’t be processed.",
+          "message": "In 2012, AlexNet taught computers to see. We couldn’t analyze your file just now — check its format and size and try again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2016-FLOW",
+      "internal": "WORKFLOW_ABORTED",
+      "category": "FLOW",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2016,
+        "title": "AlphaGo",
+        "blurb": "2016 gewann AlphaGo gegen Go-Meister Lee Sedol und zeigte KI-Stärke in komplexer Strategie.",
+        "sourceUrl": "https://deepmind.google/research/alphago/"
+      },
+      "i18n": {
+        "de": {
+          "title": "Der Ablauf wurde abgebrochen.",
+          "message": "2016 meisterte AlphaGo das hochkomplexe Go-Spiel. Unser Ablauf ist mittendrin stehengeblieben. Du kannst ihn neu starten.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "The process was interrupted.",
+          "message": "In 2016, AlphaGo mastered the hugely complex game of Go. Our process stopped midway. You can start it again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2017-CTX",
+      "internal": "CONTEXT_STATE_LOST",
+      "category": "CTX",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2017,
+        "title": "Transformer („Attention Is All You Need“)",
+        "blurb": "2017 führte „Attention Is All You Need“ den Transformer ein — die Grundlage moderner Sprachmodelle.",
+        "sourceUrl": "https://arxiv.org/abs/1706.03762"
+      },
+      "i18n": {
+        "de": {
+          "title": "Da ist etwas aus dem Kontext gefallen.",
+          "message": "2017 brachte der Transformer KI-Systemen bei, worauf sie achten sollen. Gerade hat unser System kurz nicht aufgepasst — deine Eingaben sind nicht verloren.",
+          "actions": [
+            "reload",
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Something fell out of context.",
+          "message": "In 2017, the Transformer taught AI systems what to pay attention to. Ours lost focus for a moment — your input is not lost.",
+          "actions": [
+            "reload",
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2020-MODEL",
+      "internal": "MODEL_RESPONSE_FAILED",
+      "category": "MODEL",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2020,
+        "title": "GPT-3",
+        "blurb": "2020 zeigte GPT-3 mit 175 Milliarden Parametern starke Few-Shot-Fähigkeiten.",
+        "sourceUrl": "https://arxiv.org/abs/2005.14165"
+      },
+      "i18n": {
+        "de": {
+          "title": "Es kam keine Antwort zurück.",
+          "message": "2020 demonstrierte GPT-3, wie vielseitig große Sprachmodelle sind. Diesmal kam keine verwertbare Antwort zurück — bitte erneut versuchen.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "No response came back.",
+          "message": "In 2020, GPT-3 showed how versatile large language models can be. This time no usable response came back — please try again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2022-UI",
+      "internal": "UI_UNRESPONSIVE",
+      "category": "UI",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2022,
+        "title": "ChatGPT",
+        "blurb": "Am 30. November 2022 veröffentlichte OpenAI ChatGPT.",
+        "sourceUrl": "https://openai.com/index/chatgpt/"
+      },
+      "i18n": {
+        "de": {
+          "title": "Die Oberfläche macht kurz Pause.",
+          "message": "Am 30.11.2022 zeigte ChatGPT, wie natürlich sich Software anfühlen kann. Gerade fühlt sie sich etwas weniger natürlich an — der Vorgang konnte nicht abgeschlossen werden. Lade die Seite neu.",
+          "actions": [
+            "reload",
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "The interface paused for a moment.",
+          "message": "On 30 Nov 2022, ChatGPT showed how natural software can feel. Right now it feels a little less so — the action couldn’t complete. Try reloading.",
+          "actions": [
+            "reload",
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2023-LOGIC",
+      "internal": "REASONING_FAILED",
+      "category": "LOGIC",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2023,
+        "title": "GPT-4",
+        "blurb": "Am 14. März 2023 veröffentlichte OpenAI GPT-4.",
+        "sourceUrl": "https://openai.com/index/gpt-4-research/"
+      },
+      "i18n": {
+        "de": {
+          "title": "Die Analyse hat sich verhakt.",
+          "message": "2023 hob GPT-4 das logische Schlussfolgern auf ein neues Niveau. Unsere Analyse hat sich gerade verhakt. Versuch es bitte noch einmal.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "The analysis got stuck.",
+          "message": "In 2023, GPT-4 raised reasoning to a new level. Our analysis just got stuck. Please try again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2024-MULTI",
+      "internal": "MULTIMODAL_FAILED",
+      "category": "MULTI",
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 2024,
+        "title": "GPT-4o",
+        "blurb": "Am 13. Mai 2024 stellte OpenAI GPT-4o als multimodales Echtzeitmodell vor.",
+        "sourceUrl": "https://openai.com/index/hello-gpt-4o/"
+      },
+      "i18n": {
+        "de": {
+          "title": "Audio, Bild oder Sprache stockt.",
+          "message": "2024 verband GPT-4o Text, Bild und Stimme in Echtzeit. Bei uns stockt gerade die multimodale Verarbeitung — bitte erneut versuchen.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Audio, image or voice stalled.",
+          "message": "In 2024, GPT-4o merged text, image and voice in real time. Our multimodal processing stalled — please try again.",
+          "actions": [
+            "retry",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1942-ACCESS",
+      "internal": "ACCESS_FORBIDDEN",
+      "category": "ACCESS",
+      "httpStatus": 403,
+      "severity": "warning",
+      "retryable": false,
+      "milestone": {
+        "year": 1942,
+        "title": "Asimovs Robotergesetze",
+        "blurb": "1942 formulierte Isaac Asimov in der Kurzgeschichte „Runaround“ die drei Robotergesetze.",
+        "sourceUrl": "https://en.wikipedia.org/wiki/Three_Laws_of_Robotics"
+      },
+      "i18n": {
+        "de": {
+          "title": "Diese Aktion ist nicht erlaubt.",
+          "message": "1942 formulierte Asimov Regeln, die Maschinen Grenzen setzen. Für diese Aktion fehlt dir die Berechtigung. Wende dich an die Person, die dir Zugriff geben kann.",
+          "actions": [
+            "back",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "This action isn’t allowed.",
+          "message": "In 1942, Asimov wrote rules that set limits for machines. You don’t have permission for this action. Ask whoever can grant you access.",
+          "actions": [
+            "back",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1950-AUTH",
+      "internal": "AUTH_SESSION_EXPIRED",
+      "category": "AUTH",
+      "httpStatus": 401,
+      "severity": "warning",
+      "retryable": false,
+      "milestone": {
+        "year": 1950,
+        "title": "Turing-Test",
+        "blurb": "1950 stellte Alan Turing in „Computing Machinery and Intelligence“ den Imitationstest (Turing-Test) vor.",
+        "sourceUrl": "https://doi.org/10.1093/mind/LIX.236.433"
+      },
+      "i18n": {
+        "de": {
+          "title": "Bitte melde dich neu an.",
+          "message": "1950 fragte Alan Turing, wie man echte von vorgetäuschter Intelligenz unterscheidet. Wir können dich gerade nicht sicher zuordnen — deine Sitzung ist abgelaufen. Melde dich bitte neu an.",
+          "actions": [
+            "login",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Please sign in again.",
+          "message": "In 1950, Alan Turing asked how to tell real from imitated intelligence. We can’t verify you right now — your session has expired. Please sign in again.",
+          "actions": [
+            "login",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1955-INPUT",
+      "internal": "INPUT_VALIDATION_FAILED",
+      "category": "INPUT",
+      "httpStatus": 422,
+      "severity": "warning",
+      "retryable": false,
+      "milestone": {
+        "year": 1955,
+        "title": "Logic Theorist",
+        "blurb": "1955/56 bewies der „Logic Theorist“ von Newell, Simon und Shaw mathematische Sätze — eines der ersten KI-Programme.",
+        "sourceUrl": "https://en.wikipedia.org/wiki/Logic_Theorist"
+      },
+      "i18n": {
+        "de": {
+          "title": "Bitte prüf deine Eingabe.",
+          "message": "1955 lernte der Logic Theorist, logisch korrekt zu schließen. Deine Eingabe ist gerade nicht schlüssig für uns — bitte prüfe die markierten Felder.",
+          "actions": [
+            "back",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Please check your input.",
+          "message": "In 1955, the Logic Theorist learned to reason correctly. Your input doesn’t add up for us — please review the highlighted fields.",
+          "actions": [
+            "back",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1958-NET",
+      "internal": "NETWORK_UNREACHABLE",
+      "category": "NET",
+      "httpStatus": 504,
+      "severity": "error",
+      "retryable": true,
+      "milestone": {
+        "year": 1958,
+        "title": "Perceptron",
+        "blurb": "1958 stellte Frank Rosenblatt das Perceptron vor — ein frühes künstliches neuronales Netz.",
+        "sourceUrl": "https://doi.org/10.1037/h0042519"
+      },
+      "i18n": {
+        "de": {
+          "title": "Keine Verbindung.",
+          "message": "1958 verband Rosenblatts Perceptron erstmals künstliche „Neuronen“. Bei dir ist die Verbindung gerade unterbrochen — prüfe dein Netz und versuch es erneut.",
+          "actions": [
+            "retry",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "No connection.",
+          "message": "In 1958, Rosenblatt’s Perceptron first wired up artificial “neurons”. Your connection just dropped — check your network and try again.",
+          "actions": [
+            "retry",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1969-LIMIT",
+      "internal": "RATE_LIMIT_EXCEEDED",
+      "category": "LIMIT",
+      "httpStatus": 429,
+      "severity": "warning",
+      "retryable": true,
+      "retryAfterSec": 30,
+      "milestone": {
+        "year": 1969,
+        "title": "„Perceptrons“ (Minsky & Papert)",
+        "blurb": "1969 zeigten Minsky und Papert in „Perceptrons“ die Grenzen einfacher Netze auf — ein Auslöser des ersten „AI Winter“.",
+        "sourceUrl": "https://en.wikipedia.org/wiki/Perceptrons_(book)"
+      },
+      "i18n": {
+        "de": {
+          "title": "Kurz zu viel auf einmal.",
+          "message": "1969 markierte das Buch „Perceptrons“ eine Phase knapper KI-Ressourcen. Gerade kamen zu viele Anfragen auf einmal — warte einen Moment und versuch es dann erneut.",
+          "actions": [
+            "wait",
+            "retry",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "A bit too much at once.",
+          "message": "In 1969, the book “Perceptrons” marked a phase of scarce AI resources. Too many requests came in at once — wait a moment, then try again.",
+          "actions": [
+            "wait",
+            "retry",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-1974-MAINT",
+      "internal": "SERVICE_MAINTENANCE",
+      "category": "MAINT",
+      "httpStatus": 503,
+      "severity": "info",
+      "retryable": true,
+      "retryAfterSec": 300,
+      "milestone": {
+        "year": 1974,
+        "title": "Erster „AI Winter“",
+        "blurb": "Ab etwa 1974 brach die KI-Förderung ein — der erste „AI Winter“ begann.",
+        "sourceUrl": "https://en.wikipedia.org/wiki/AI_winter"
+      },
+      "i18n": {
+        "de": {
+          "title": "Kurze Wartungspause.",
+          "message": "Ab 1974 legte der erste „AI Winter“ die Branche zeitweise auf Eis. Wir machen gerade selbst eine kurze Pause für Wartung. Bitte versuch es in Kürze noch einmal.",
+          "actions": [
+            "wait",
+            "retry"
+          ]
+        },
+        "en": {
+          "title": "Brief maintenance break.",
+          "message": "From 1974, the first “AI winter” put the field on ice for a while. We’re taking a short maintenance break ourselves. Please try again shortly.",
+          "actions": [
+            "wait",
+            "retry"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2011-FIND",
+      "internal": "RESOURCE_NOT_FOUND",
+      "category": "FIND",
+      "httpStatus": 404,
+      "severity": "warning",
+      "retryable": false,
+      "milestone": {
+        "year": 2011,
+        "title": "IBM Watson @ Jeopardy!",
+        "blurb": "2011 gewann IBM Watson in der Quizshow „Jeopardy!“ gegen menschliche Champions.",
+        "sourceUrl": "https://en.wikipedia.org/wiki/Watson_(computer)"
+      },
+      "i18n": {
+        "de": {
+          "title": "Nichts gefunden.",
+          "message": "2011 fand IBM Watson bei „Jeopardy!“ blitzschnell die richtige Antwort. Wir haben dazu gerade nichts gefunden — prüfe die Eingabe oder versuch eine andere Suche.",
+          "actions": [
+            "back",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Nothing found.",
+          "message": "In 2011, IBM Watson found the right answer on “Jeopardy!” in a flash. We found nothing for this — check your input or try a different search.",
+          "actions": [
+            "back",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2022-SAFE",
+      "internal": "CONTENT_BLOCKED_SAFETY",
+      "category": "SAFE",
+      "severity": "warning",
+      "retryable": false,
+      "milestone": {
+        "year": 2022,
+        "title": "InstructGPT / RLHF",
+        "blurb": "2022 zeigte OpenAIs InstructGPT, wie sich Modelle per RLHF (Reinforcement Learning from Human Feedback) an menschliche Vorgaben ausrichten lassen.",
+        "sourceUrl": "https://arxiv.org/abs/2203.02155"
+      },
+      "i18n": {
+        "de": {
+          "title": "Das hält der Schutzfilter zurück.",
+          "message": "2022 lernten Modelle dank RLHF, auch mal „lieber nicht“ zu sagen. Dieser Inhalt wurde von unserem Sicherheitsfilter zurückgehalten. Formuliere ihn bitte anders.",
+          "actions": [
+            "back",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "The safety filter held this back.",
+          "message": "In 2022, RLHF taught models to sometimes say “better not”. Our safety filter held this content back. Please rephrase it.",
+          "actions": [
+            "back",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    },
+    {
+      "code": "AI-2026-BILL",
+      "internal": "PAYMENT_FAILED",
+      "category": "BILL",
+      "httpStatus": 402,
+      "severity": "warning",
+      "retryable": false,
+      "milestone": {
+        "year": 2026,
+        "title": "Börsengang-Welle der KI-Labore",
+        "blurb": "Um 2026 treibt die Kommerzialisierung der KI-Branche Richtung Börsengänge großer Labore — KI wird endgültig zum Milliardengeschäft. (Editoriales Thema, keine einzelne Quelle.)"
+      },
+      "i18n": {
+        "de": {
+          "title": "Heute fließt dein Geld woanders hin.",
+          "message": "2026 drängen die großen KI-Labore an die Börse — Geld fließt gerade reichlich in die Branche. Deins leider nicht: Die Zahlung kam nicht durch. Prüfe bitte deine Zahlungsdaten.",
+          "actions": [
+            "updatePayment",
+            "report",
+            "copy"
+          ]
+        },
+        "en": {
+          "title": "Your money’s flowing elsewhere today.",
+          "message": "In 2026, the big AI labs are heading for IPOs — money is pouring into the field. Yours didn’t make it through, though: the payment failed. Please check your payment details.",
+          "actions": [
+            "updatePayment",
+            "report",
+            "copy"
+          ]
+        }
+      }
+    }
+  ]
+}

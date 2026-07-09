@@ -1,8 +1,20 @@
 mod espanso;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
+#[cfg(test)]
+mod ipc_tests;
+
+/// `generate_context!` darf pro Binary nur EINMAL expandiert werden (es bettet
+/// u. a. das Info.plist-Symbol ein). Deshalb hier gebündelt — die IPC-Tests
+/// holen sich denselben Context inklusive aufgelöster Capabilities.
+pub fn context<R: tauri::Runtime>() -> tauri::Context<R> {
+    tauri::generate_context!()
+}
+
+/// Hängt Plugins und Commands an einen Builder. Die IPC-Tests reichen hier
+/// `mock_builder()` hinein (der den bekannten invoke_key setzt) und prüfen
+/// damit exakt die ausgelieferte Command-Registrierung.
+pub fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             espanso::get_espanso_info,
@@ -19,6 +31,11 @@ pub fn run() {
             espanso::package_uninstall,
             espanso::package_update,
         ])
-        .run(tauri::generate_context!())
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    configure(tauri::Builder::default())
+        .run(context())
         .expect("error while running tauri application");
 }

@@ -1,10 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, type EspansoInfo, type FileGroup, type SnippetView } from "./lib/api";
+import {
+  AppError,
+  createReport,
+  formatUser,
+  parseError,
+  type ActionId,
+  type Report,
+  type UserFacingError,
+} from "./lib/errors";
 import SnippetEditor, { type EditorTarget } from "./components/SnippetEditor";
 import HubBrowser from "./components/HubBrowser";
+import ErrorDialog from "./components/ErrorDialog";
+import PromptModal from "./components/PromptModal";
 
 type View = "snippets" | "hub";
 type Toast = { msg: string; kind: "ok" | "err" } | null;
+
+/** Ein aufgelöster Fehler samt Kontext für Report und Wiederholung. */
+interface ErrorState {
+  ui: UserFacingError;
+  detail: string;
+  report: Report;
+  retry?: () => void;
+}
+
+const SUPPORT_MAIL = "info@affairs-consulting.de";
 
 export default function App() {
   const [info, setInfo] = useState<EspansoInfo | null>(null);
@@ -20,29 +43,51 @@ export default function App() {
     index: number;
     trigger: string;
   } | null>(null);
+  const [newFileOpen, setNewFileOpen] = useState(false);
+  const [newFileBusy, setNewFileBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [svcBusy, setSvcBusy] = useState(false);
+  const [error, setError] = useState<ErrorState | null>(null);
+  const [appVersion, setAppVersion] = useState("0.0.0");
 
   const notify = useCallback((msg: string, kind: "ok" | "err" = "ok") => {
     setToast({ msg, kind });
     window.setTimeout(() => setToast(null), 3800);
   }, []);
 
+  /**
+   * Einziger Weg, wie ein Fehler beim Nutzer landet: Backend-Code auflösen,
+   * Report (PII-frei) erzeugen, Dialog mit den Aktionen der Registry zeigen.
+   */
+  const fail = useCallback(
+    (e: unknown, retry?: () => void) => {
+      const { code, detail } = parseError(e);
+      const report = createReport(code, { appVersion, route: view });
+      setError({
+        ui: formatUser(code, { locale: "de", traceId: report.traceId }),
+        detail,
+        report,
+        retry,
+      });
+    },
+    [appVersion, view]
+  );
+
   const loadInfo = useCallback(async () => {
     try {
       setInfo(await api.info());
-    } catch (e: any) {
-      notify(String(e), "err");
+    } catch (e) {
+      fail(e);
     }
-  }, [notify]);
+  }, [fail]);
 
   const loadSnippets = useCallback(async () => {
     try {
       setGroups(await api.listSnippets());
-    } catch (e: any) {
-      notify(String(e), "err");
+    } catch (e) {
+      fail(e);
     }
-  }, [notify]);
+  }, [fail]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -55,11 +100,63 @@ export default function App() {
     }
   }, []);
 
+  const reloadAll = useCallback(() => {
+    loadSnippets();
+    refreshStatus();
+    loadInfo();
+  }, [loadSnippets, refreshStatus, loadInfo]);
+
   useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {
+        /* außerhalb von Tauri (vite dev im Browser) — Default bleibt stehen */
+      });
     loadInfo();
     loadSnippets();
     refreshStatus();
   }, [loadInfo, loadSnippets, refreshStatus]);
+
+  async function onErrorAction(id: ActionId) {
+    const current = error;
+    if (!current) return;
+    switch (id) {
+      case "back":
+        setError(null);
+        break;
+      case "retry":
+        setError(null);
+        current.retry?.();
+        break;
+      case "reload":
+        setError(null);
+        reloadAll();
+        break;
+      case "copy":
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(current.report, null, 2));
+          notify("Fehlerdetails kopiert.");
+        } catch {
+          notify("Kopieren nicht möglich.", "err");
+        }
+        break;
+      case "report": {
+        // Nur der PII-freie Report geht mit — kein Dateipfad, kein Snippet-Inhalt.
+        const subject = `SnippetAffAIrs — ${current.report.code} (${current.report.traceId})`;
+        const body = JSON.stringify(current.report, null, 2);
+        try {
+          await openUrl(
+            `mailto:${SUPPORT_MAIL}?subject=${encodeURIComponent(
+              subject
+            )}&body=${encodeURIComponent(body)}`
+          );
+        } catch {
+          notify("Mail-Programm ließ sich nicht öffnen.", "err");
+        }
+        break;
+      }
+    }
+  }
 
   const totalCount = useMemo(
     () => groups.reduce((n, g) => n + g.snippets.length, 0),
@@ -95,11 +192,16 @@ export default function App() {
           : action === "stop"
           ? await api.serviceStop()
           : await api.serviceRestart();
+      if (!r.success) {
+        // Die Engine hat geantwortet, aber die Aktion schlug fehl (z. B. macOS:
+        // fehlende Freigabe unter Bedienungshilfen → "start: timed out").
+        throw new AppError("AI-2016-FLOW", r.output);
+      }
       const actionLabel =
         action === "start" ? "gestartet" : action === "stop" ? "gestoppt" : "neu gestartet";
-      notify(r.output || `Engine ${actionLabel}`, r.success ? "ok" : "err");
-    } catch (e: any) {
-      notify(String(e), "err");
+      notify(r.output || `Engine ${actionLabel}`);
+    } catch (e) {
+      fail(e, () => svc(action));
     } finally {
       setSvcBusy(false);
       refreshStatus();
@@ -126,17 +228,20 @@ export default function App() {
     setEditorBusy(true);
     try {
       await api.saveSnippet({
-        file_path: editor.filePath,
+        filePath: editor.filePath,
         index: editor.snippet ? editor.snippet.index : null,
         trigger: data.trigger,
         replace: data.replace,
         label: data.label.trim() ? data.label : null,
+        // Beim Bearbeiten prüft das Backend, ob der Index noch auf dieses
+        // Snippet zeigt — sonst hat jemand die Datei zwischenzeitlich geändert.
+        expectedTrigger: editor.snippet ? editor.snippet.trigger : null,
       });
       setEditor(null);
       notify(editor.snippet ? "Snippet aktualisiert." : "Snippet angelegt.");
       await loadSnippets();
-    } catch (e: any) {
-      notify(String(e), "err");
+    } catch (e) {
+      fail(e);
     } finally {
       setEditorBusy(false);
     }
@@ -144,28 +249,30 @@ export default function App() {
 
   async function doDelete() {
     if (!confirmDel) return;
+    const target = confirmDel;
+    setConfirmDel(null);
     try {
-      await api.deleteSnippet(confirmDel.file, confirmDel.index);
+      await api.deleteSnippet(target.file, target.index, target.trigger);
       notify("Snippet gelöscht (Backup als .yml.bak abgelegt).");
       await loadSnippets();
-    } catch (e: any) {
-      notify(String(e), "err");
-    } finally {
-      setConfirmDel(null);
+    } catch (e) {
+      fail(e);
     }
   }
 
-  async function newFile() {
-    const name = window.prompt("Name der neuen Match-Datei (ohne .yml):", "meine-snippets");
-    if (!name) return;
+  async function createFile(name: string) {
+    setNewFileBusy(true);
     try {
       const path = await api.createMatchFile(name);
+      setNewFileOpen(false);
       notify("Datei angelegt.");
       await loadSnippets();
       setActiveFile(path);
       setView("snippets");
-    } catch (e: any) {
-      notify(String(e), "err");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setNewFileBusy(false);
     }
   }
 
@@ -207,7 +314,7 @@ export default function App() {
             <span className="count">{g.snippets.length}</span>
           </div>
         ))}
-        <div className="nav-item" onClick={newFile}>
+        <div className="nav-item" onClick={() => setNewFileOpen(true)}>
           <span>＋ Neue Datei</span>
         </div>
 
@@ -254,14 +361,7 @@ export default function App() {
           <button className="btn btn-sm" disabled={svcBusy} onClick={() => svc("restart")}>
             Neustart
           </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => {
-              loadSnippets();
-              refreshStatus();
-              loadInfo();
-            }}
-          >
+          <button className="btn btn-sm btn-ghost" onClick={reloadAll}>
             ⟳
           </button>
         </div>
@@ -276,7 +376,7 @@ export default function App() {
           )}
 
           {view === "hub" ? (
-            <HubBrowser notify={notify} onChanged={loadSnippets} />
+            <HubBrowser notify={notify} onError={fail} onChanged={loadSnippets} />
           ) : (
             <>
               <div className="content-head">
@@ -361,6 +461,20 @@ export default function App() {
         />
       )}
 
+      {/* -------------------------------------------------- Neue Datei */}
+      {newFileOpen && (
+        <PromptModal
+          title="Neue Match-Datei"
+          label="Dateiname (ohne .yml)"
+          placeholder="meine-snippets"
+          initial="meine-snippets"
+          hint="Erlaubt sind Buchstaben, Ziffern, - und _. Alles andere wird zu einem Bindestrich."
+          busy={newFileBusy}
+          onCancel={() => setNewFileOpen(false)}
+          onConfirm={createFile}
+        />
+      )}
+
       {/* -------------------------------------------------- Delete-Confirm */}
       {confirmDel && (
         <div className="overlay" onMouseDown={() => setConfirmDel(null)}>
@@ -381,6 +495,16 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* -------------------------------------------------- Fehler */}
+      {error && (
+        <ErrorDialog
+          ui={error.ui}
+          detail={error.detail}
+          onAction={onErrorAction}
+          onClose={() => setError(null)}
+        />
       )}
 
       {/* -------------------------------------------------- Toast */}
