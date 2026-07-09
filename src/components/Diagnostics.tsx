@@ -38,8 +38,9 @@ export default function Diagnostics({ info, running, autostart, notify, onError 
   async function secureInput() {
     setBusy(true);
     try {
+      // Das Backend wirft, wenn der Workaround fehlschlägt — auch bei Exit-Code 0.
       const r = await api.fixSecureInput();
-      notify(r.output || "Versuch abgeschlossen — teste die Eingabe erneut.");
+      notify(r.output || "Secure Input aufgehoben — teste die Eingabe erneut.");
     } catch (e) {
       onError(e);
     } finally {

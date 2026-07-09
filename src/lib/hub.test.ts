@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cmpVersion, parseInstalledPackages } from "./hub";
+import { cmpVersion, parseInstalledPackages, parseManifest } from "./hub";
 
 // Verifiziertes Ausgabeformat von `espanso package list`.
 const REAL_OUTPUT = `- all-emojis - version: 0.2.0 (espanso-hub)
@@ -65,5 +65,47 @@ describe("cmpVersion", () => {
     expect(cmpVersion("v1.2.3", "1.2.3")).toBe(0);
     expect(cmpVersion("1.2.3", "v1.2.3")).toBe(0);
     expect(cmpVersion("v1.3.0", "v1.2.9")).toBeGreaterThan(0);
+  });
+});
+
+// Wortgleich aus packages/accented-words/1.0.0/_manifest.yml im espanso-Hub.
+const REAL_MANIFEST = `name: accented-words
+title: Accented Words
+description: Automatically accent commonly accented words and proper nouns in English.
+version: 1.0.0
+author: Joshua Hall
+homepage: "https://github.com/joshjhall/espanso-accented-words"
+tags: ["english", "languages", "accents"]
+`;
+
+describe("parseManifest", () => {
+  it("liest ein echtes Hub-Manifest", () => {
+    const m = parseManifest(REAL_MANIFEST);
+    expect(m.title).toBe("Accented Words");
+    expect(m.author).toBe("Joshua Hall");
+    expect(m.version).toBe("1.0.0");
+    expect(m.homepage).toBe("https://github.com/joshjhall/espanso-accented-words");
+    expect(m.tags).toEqual(["english", "languages", "accents"]);
+  });
+
+  it("behält Doppelpunkte im Wert — sonst reißt jede URL und jeder Satz ab", () => {
+    const m = parseManifest('description: Achtung: das hier bleibt ganz\n');
+    expect(m.description).toBe("Achtung: das hier bleibt ganz");
+  });
+
+  it("ignoriert Kommentare und Leerzeilen", () => {
+    const m = parseManifest("# Kommentar\n\ntitle: X\n");
+    expect(m.title).toBe("X");
+  });
+
+  it("verkraftet fehlende Felder", () => {
+    const m = parseManifest("name: nur-name\n");
+    expect(m.title).toBeUndefined();
+    expect(m.tags).toBeUndefined();
+  });
+
+  it("liest leere Tag-Listen als leeres Array, nicht als [\"\"]", () => {
+    const m = parseManifest("tags: []\n");
+    expect(m.tags).toEqual([]);
   });
 });

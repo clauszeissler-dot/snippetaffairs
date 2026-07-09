@@ -1062,11 +1062,15 @@ pub fn autostart_disable() -> Result<CmdResult, String> {
 
 // ---- Snippet testen ----------------------------------------------------------
 
-/// `match exec` beendet sich auch im Fehlerfall mit Exit-Code 0 und schreibt
-/// die Ursache nur nach stdout (z. B. „unable to exec match: Worker process is
-/// not running"). Auf `success` allein zu vertrauen, meldete einen Erfolg, den
-/// es nicht gab — deshalb wird die Ausgabe ausgewertet.
-fn exec_failed(r: &CmdResult) -> bool {
+/// Manche espanso-Unterbefehle beenden sich auch im Fehlerfall mit Exit-Code 0
+/// und schreiben die Ursache nur nach stdout (z. B. `match exec` →
+/// „unable to exec match: Worker process is not running"). Auf `success` allein
+/// zu vertrauen, meldete einen Erfolg, den es nicht gab — deshalb wird
+/// zusätzlich die Ausgabe ausgewertet.
+///
+/// Wird von jedem Befehl genutzt, dessen Ergebnis die Oberfläche als Erfolg
+/// meldet. Siehe Exit-Code-Tabelle in AGENTS.md §4.
+fn cli_failed(r: &CmdResult) -> bool {
     if !r.success {
         return true;
     }
@@ -1082,7 +1086,7 @@ pub fn match_exec(trigger: String) -> Result<CmdResult, String> {
         return Err(ecb(ECB_INPUT, "Kein Trigger angegeben."));
     }
     let r = run_espanso(&["match", "exec", "--trigger", trigger])?;
-    if exec_failed(&r) {
+    if cli_failed(&r) {
         return Err(ecb(ECB_FLOW, r.output));
     }
     Ok(r)
@@ -1100,7 +1104,11 @@ pub fn engine_log() -> Result<CmdResult, String> {
 /// Passwort-Dialog). espanso bringt dafür einen eigenen Workaround mit.
 #[tauri::command]
 pub fn fix_secure_input() -> Result<CmdResult, String> {
-    run_espanso(&["workaround", "secure-input"])
+    let r = run_espanso(&["workaround", "secure-input"])?;
+    if cli_failed(&r) {
+        return Err(ecb(ECB_FLOW, r.output));
+    }
+    Ok(r)
 }
 
 /// macOS: Systemeinstellungen → Bedienungshilfen öffnen. Ohne diese Freigabe
@@ -1581,19 +1589,22 @@ mod tests {
     }
 
     #[test]
-    fn exec_failure_is_detected_despite_exit_zero() {
+    fn cli_failure_is_detected_despite_exit_zero() {
         // Verifiziertes Verhalten von espanso 2.3.0: Exit-Code 0, Fehler nur im Text.
         let failed = CmdResult {
             success: true,
             output: "unable to exec match: Worker process is not running, please start Espanso first.".into(),
         };
-        assert!(exec_failed(&failed), "Fehlertext muss als Fehler gelten");
+        assert!(cli_failed(&failed), "Fehlertext muss als Fehler gelten");
 
         let ok = CmdResult { success: true, output: String::new() };
-        assert!(!exec_failed(&ok));
+        assert!(!cli_failed(&ok));
+
+        let registered = CmdResult { success: true, output: "service registered correctly!".into() };
+        assert!(!cli_failed(&registered), "Erfolgsmeldungen dürfen nicht als Fehler gelten");
 
         let hard = CmdResult { success: false, output: String::new() };
-        assert!(exec_failed(&hard));
+        assert!(cli_failed(&hard));
     }
 
     #[test]

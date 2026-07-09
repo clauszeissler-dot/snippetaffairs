@@ -91,7 +91,7 @@ export async function fetchHubIndex(): Promise<HubPackage[]> {
 }
 
 /** Minimal-Parser für die flachen espanso-Manifeste (title/description/…). */
-function parseManifest(text: string): Partial<HubPackage> {
+export function parseManifest(text: string): Partial<HubPackage> {
   const out: Partial<HubPackage> = {};
   for (const raw of text.split("\n")) {
     const line = raw.trim();

@@ -76,11 +76,20 @@ Verifiziert (espanso 2.3.0):
 | Befehl | Exit-Code im Fehlerfall | Verlässlich? |
 |---|---|---|
 | `espanso --version` | **1** — obwohl erfolgreich | nein, stdout parsen |
-| `espanso match exec` | **0** — trotz „Worker process is not running" | nein, Ausgabe prüfen (`exec_failed`) |
+| `espanso match exec` | **0** — trotz „Worker process is not running" | nein, Ausgabe prüfen (`cli_failed`) |
 | `espanso service check` | 0 — Zustand nur im Klartext | nein, Text auswerten |
 | `espanso install` | 2 | **ja** |
 | `espanso uninstall` | 3 | **ja** |
 | `espanso package update` | 5 | **ja** |
+| `espanso stop` (läuft nicht) | 4 | **ja** |
+| `espanso status` (läuft nicht) | 4 | **ja** |
+| `espanso service register` (schon registriert) | 0 + „registered correctly" | idempotent |
+| `espanso start` | **ungemessen** | unbelegt → `cli_failed` |
+| `espanso service unregister` | **ungemessen** (destruktiv) | unbelegt |
+| `espanso workaround secure-input` | **ungemessen** (verändert System) | unbelegt → `cli_failed` |
+
+Für die ungemessenen Befehle gilt `cli_failed()`: es prüft `success` **und** die Ausgabe auf
+„unable to"/„error". Lieber ein Fehlerdialog zu viel als ein Erfolg, den es nicht gab.
 
 Bei jedem neuen CLI-Aufruf **einmal mit falschem Argument ausprobieren** und den Exit-Code
 notieren, statt ihn anzunehmen. Die Tabelle oben ist so entstanden.
