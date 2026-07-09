@@ -53,7 +53,7 @@ und verwaltest.
 <p align="center">
   <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest/download/SnippetAffAIrs-macOS-AppleSilicon.dmg"><img src="https://img.shields.io/badge/macOS-Apple_Silicon_·_.dmg-FC8337?style=for-the-badge&logo=apple&logoColor=white" alt="Download für macOS"></a>
   &nbsp;
-  <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest/download/SnippetAffAIrs-Windows-Setup.exe"><img src="https://img.shields.io/badge/Windows-.exe-2D2D2D?style=for-the-badge&logo=windows11&logoColor=00E5FF" alt="Download für Windows"></a>
+  <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest/download/SnippetAffAIrs-Windows-Setup.exe"><img src="https://img.shields.io/badge/Windows-.exe-2D2D2D?style=for-the-badge" alt="Download für Windows"></a>
   &nbsp;
   <a href="https://github.com/clauszeissler-dot/snippetaffairs/releases/latest/download/SnippetAffAIrs-Linux.AppImage"><img src="https://img.shields.io/badge/Linux-.AppImage-2D2D2D?style=for-the-badge&logo=linux&logoColor=00E5FF" alt="Download für Linux"></a>
 </p>
