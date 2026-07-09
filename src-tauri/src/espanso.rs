@@ -96,27 +96,6 @@ fn no_window(cmd: &mut Command) {
     let _ = cmd;
 }
 
-/// Baut das Command für das espanso-Binary. Windows-Sonderfall: `.cmd`/`.bat`-
-/// Shims lassen sich nicht direkt spawnen (CreateProcess) → über `cmd /C`.
-fn espanso_command(bin: &Path) -> Command {
-    #[cfg(windows)]
-    {
-        let is_batch = bin
-            .extension()
-            .map(|e| {
-                let e = e.to_string_lossy().to_ascii_lowercase();
-                e == "cmd" || e == "bat"
-            })
-            .unwrap_or(false);
-        if is_batch {
-            let mut c = Command::new("cmd");
-            c.arg("/C").arg(bin);
-            return c;
-        }
-    }
-    Command::new(bin)
-}
-
 /// Führt einen espanso-Subcommand aus und liefert (stdout+stderr, success).
 fn run_espanso(args: &[&str]) -> Result<CmdResult, String> {
     let bin = espanso_bin().ok_or_else(|| {
@@ -125,7 +104,16 @@ fn run_espanso(args: &[&str]) -> Result<CmdResult, String> {
             "Die Text-Expander-Engine (espanso) wurde nicht gefunden. macOS: `brew install --cask espanso` — sonst espanso.org/install.",
         )
     })?;
-    let mut cmd = espanso_command(&bin);
+    // Bewusst KEIN `cmd /C` unter Windows: Rusts Batch-Argument-Escaping
+    // (Fix für CVE-2024-24576, vollständig ab Rust 1.81) greift nur, wenn das
+    // gestartete Programm SELBST die .bat/.cmd-Datei ist. Bei `cmd /C <shim>
+    // <args>` wäre das Programm cmd.exe — dessen Metazeichen (& | ^ > < " %)
+    // blieben in den Argumenten ungeschützt (Command Injection, CWE-78).
+    // Die Argumente stammen aus fremden Quellen (Paketnamen aus dem espanso-Hub,
+    // Trigger aus fremden YAML-Dateien). Rust >= 1.81 (siehe rust-version in
+    // Cargo.toml) startet .bat/.cmd-Shims direkt und escapt dabei korrekt.
+    // NICHT auf `cmd /C` zurückbauen.
+    let mut cmd = Command::new(&bin);
     cmd.args(args);
     no_window(&mut cmd);
     let out = cmd
@@ -331,6 +319,69 @@ fn safe_file_stem(name: &str) -> Result<String, String> {
         return Err(ecb(ECB_INPUT, "Der Dateiname ist ungültig."));
     }
     Ok(safe)
+}
+
+// ---------------------------------------------------------------------------
+// Eingabevalidierung vor CLI-Aufrufen (zweite Schicht gegen Command Injection)
+//
+// Erste Schicht ist der direkte Spawn ohne `cmd /C` (siehe run_espanso). Hier
+// wird zusätzlich VOR jedem CLI-Aufruf geprüft, dass keine Shell-Metazeichen in
+// fremde Argumente gelangen. Beide Schichten sind bewusst redundant.
+// ---------------------------------------------------------------------------
+
+/// Zeichen, die cmd.exe bzw. gängige Shells als Metazeichen interpretieren.
+/// Ein Trigger mit einem dieser Zeichen wird nicht an die Engine-CLI gereicht.
+const TRIGGER_FORBIDDEN: &[char] = &['&', '|', '^', '>', '<', '"', '%', '\r', '\n'];
+
+/// Prüft einen Paketnamen vor dem CLI-Aufruf — ZWEITE Schicht (Defense-in-Depth).
+///
+/// Die erste und tragende Schicht ist der direkte Spawn ohne `cmd /C`
+/// (`run_espanso`): seit Rust 1.81 escapt `Command` Batch-Argumente und liefert
+/// einen `InvalidInput`-Fehler, wenn es NICHT sicher escapen kann, statt unsicher
+/// weiterzugeben (Advisory GHSA-q455-m56c-85mh). Diese Validierung ist der Schutz
+/// für den Fall, dass jemand künftig doch eine Shell oder einen Interpreter
+/// dazwischenschiebt. Zusätzlich landet ein Paketname auch in Dateipfaden
+/// (Hub-Paketordner) — deshalb hier die strengere Whitelist `[A-Za-z0-9._-]`,
+/// die zugleich jedes Shell-Metazeichen ausschließt. Quelle: espanso-Hub.
+fn validate_package_name(name: &str) -> Result<(), String> {
+    let ok = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    if ok {
+        Ok(())
+    } else {
+        Err(ecb(
+            ECB_INPUT,
+            "Der Paketname enthält unzulässige Zeichen. Erlaubt sind nur Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich.",
+        ))
+    }
+}
+
+/// Prüft einen Trigger vor `match exec` — ZWEITE Schicht (Defense-in-Depth).
+///
+/// Die erste und tragende Schicht ist der direkte Spawn ohne `cmd /C`
+/// (`run_espanso`): seit Rust 1.81 escapt `Command` Batch-Argumente und liefert
+/// einen `InvalidInput`-Fehler, wenn es NICHT sicher escapen kann, statt unsicher
+/// weiterzugeben (Advisory GHSA-q455-m56c-85mh). Diese Validierung ist der Schutz
+/// für den Fall, dass jemand künftig doch eine Shell oder einen Interpreter
+/// dazwischenschiebt.
+///
+/// Trigger dürfen legitim Sonderzeichen wie `: ! ? #` tragen — deshalb KEINE
+/// restriktive Whitelist, sondern nur die gefährlichen Shell-Metazeichen
+/// ausschließen. Wichtig: betroffen ist NUR der „Testen"-Knopf (`match_exec`).
+/// Das Snippet selbst liest espanso direkt aus der YAML und expandiert es normal
+/// — die Fehlermeldung sagt das ausdrücklich, damit niemand „Trigger abgelehnt"
+/// als „meine Daten sind kaputt" missversteht. Quelle: fremde YAML-Dateien.
+fn validate_trigger_chars(trigger: &str) -> Result<(), String> {
+    if trigger.contains(TRIGGER_FORBIDDEN) {
+        Err(ecb(
+            ECB_INPUT,
+            "Dieses Snippet lässt sich hier nicht per Knopfdruck testen: sein Trigger enthält ein Zeichen (& | ^ > < \" % oder einen Zeilenumbruch), das nicht sicher an die Engine übergeben werden kann. Das Snippet selbst ist in Ordnung und expandiert ganz normal — nur der Test-Knopf ist dafür gesperrt.",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -666,13 +717,41 @@ pub fn save_snippet(
     label: Option<String>,
     expected_trigger: Option<String>,
 ) -> Result<(), String> {
-    let path = PathBuf::from(&file_path);
+    let base = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    save_snippet_in(
+        &base,
+        Path::new(&file_path),
+        index,
+        trigger,
+        replace,
+        label,
+        expected_trigger,
+    )
+}
+
+/// Kern von `save_snippet`, aber mit explizitem Basisordner. Prüft zuerst über
+/// `ensure_within`, dass die Zieldatei wirklich im match-Ordner liegt — sonst
+/// könnte ein Symlink (z. B. match/x.yml → ~/.zshrc) beim Speichern nach außen
+/// durchschreiben (Path Traversal, CWE-22). Von der Command-Funktion getrennt,
+/// damit die Tests einen Temp-Ordner als Basis übergeben können, ganz ohne
+/// `#[cfg(test)]`-Sonderwege im Produktivcode.
+fn save_snippet_in(
+    base: &Path,
+    file_path: &Path,
+    index: Option<usize>,
+    trigger: String,
+    replace: String,
+    label: Option<String>,
+    expected_trigger: Option<String>,
+) -> Result<(), String> {
+    ensure_within(file_path, base)?;
+    let path = file_path;
     let trigger = trigger.trim().to_string();
     if trigger.is_empty() {
         return Err(ecb(ECB_INPUT, "Der Trigger darf nicht leer sein."));
     }
     let mut doc = if path.exists() {
-        read_doc(&path)?
+        read_doc(path)?
     } else {
         MatchDoc::default()
     };
@@ -729,7 +808,7 @@ pub fn save_snippet(
             });
         }
     }
-    write_doc(&path, &doc)
+    write_doc(path, &doc)
 }
 
 /// Löscht ein Snippet. `expected_trigger` sichert wie bei `save_snippet` ab,
@@ -740,8 +819,21 @@ pub fn delete_snippet(
     index: usize,
     expected_trigger: Option<String>,
 ) -> Result<(), String> {
-    let path = PathBuf::from(&file_path);
-    let mut doc = read_doc(&path)?;
+    let base = match_dir().ok_or_else(|| ecb(ECB_NOT_FOUND, MSG_NO_CONFIG))?;
+    delete_snippet_in(&base, Path::new(&file_path), index, expected_trigger)
+}
+
+/// Kern von `delete_snippet` mit explizitem Basisordner. Prüft wie
+/// `save_snippet_in` zuerst `ensure_within`, damit kein Snippet außerhalb des
+/// match-Ordners gelöscht/überschrieben werden kann (Path Traversal, CWE-22).
+fn delete_snippet_in(
+    base: &Path,
+    file_path: &Path,
+    index: usize,
+    expected_trigger: Option<String>,
+) -> Result<(), String> {
+    ensure_within(file_path, base)?;
+    let mut doc = read_doc(file_path)?;
     let m = doc.matches.get(index).ok_or_else(stale_err)?;
     if let Some(expected) = expected_trigger.as_deref() {
         if effective_trigger(m) != expected {
@@ -749,7 +841,7 @@ pub fn delete_snippet(
         }
     }
     doc.matches.remove(index);
-    write_doc(&path, &doc)
+    write_doc(file_path, &doc)
 }
 
 /// Erzeugt eine neue leere Match-Datei match/<name>.yml.
@@ -1085,6 +1177,7 @@ pub fn match_exec(trigger: String) -> Result<CmdResult, String> {
     if trigger.is_empty() {
         return Err(ecb(ECB_INPUT, "Kein Trigger angegeben."));
     }
+    validate_trigger_chars(trigger)?;
     let r = run_espanso(&["match", "exec", "--trigger", trigger])?;
     if cli_failed(&r) {
         return Err(ecb(ECB_FLOW, r.output));
@@ -1140,16 +1233,19 @@ pub fn package_list() -> Result<CmdResult, String> {
 
 #[tauri::command]
 pub fn package_install(name: String) -> Result<CmdResult, String> {
+    validate_package_name(&name)?;
     run_espanso(&["install", &name])
 }
 
 #[tauri::command]
 pub fn package_uninstall(name: String) -> Result<CmdResult, String> {
+    validate_package_name(&name)?;
     run_espanso(&["uninstall", &name])
 }
 
 #[tauri::command]
 pub fn package_update(name: String) -> Result<CmdResult, String> {
+    validate_package_name(&name)?;
     run_espanso(&["package", "update", &name])
 }
 
@@ -1243,8 +1339,9 @@ mod tests {
         let path = tmp_path("empty");
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, "matches: []\n").unwrap();
-        let res = save_snippet(
-            path.display().to_string(),
+        let res = save_snippet_in(
+            &std::env::temp_dir(),
+            &path,
             None,
             "   ".into(),
             "x".into(),
@@ -1280,8 +1377,9 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, WITH_VARS).unwrap();
 
-        let res = save_snippet(
-            path.display().to_string(),
+        let res = save_snippet_in(
+            &std::env::temp_dir(),
+            &path,
             Some(0),
             ":neu".into(),
             "Neu".into(),
@@ -1291,7 +1389,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res.unwrap_err().starts_with("ECB:AI-2017-CTX|"));
 
-        let del = delete_snippet(path.display().to_string(), 0, Some(":wasanderes".into()));
+        let del = delete_snippet_in(&std::env::temp_dir(), &path, 0, Some(":wasanderes".into()));
         assert!(del.is_err());
         assert!(del.unwrap_err().starts_with("ECB:AI-2017-CTX|"));
 
@@ -1310,8 +1408,9 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, WITH_VARS).unwrap();
 
-        save_snippet(
-            path.display().to_string(),
+        save_snippet_in(
+            &std::env::temp_dir(),
+            &path,
             Some(0),
             ":hi".into(),
             "Servus".into(),
@@ -1336,8 +1435,9 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, WITH_VARS).unwrap();
 
-        let res = save_snippet(
-            path.display().to_string(),
+        let res = save_snippet_in(
+            &std::env::temp_dir(),
+            &path,
             Some(1),
             ":date".into(),
             "kaputt".into(),
@@ -1399,10 +1499,10 @@ mod tests {
         let path = tmp_path("simplevars");
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, "matches: []\n").unwrap();
-        let p = path.display().to_string();
+        let base = std::env::temp_dir();
 
         // Anlegen mit beiden Platzhaltern → vars entstehen.
-        save_snippet(p.clone(), None, ":x".into(), "{{date}} — {{clipboard}}".into(), None, None)
+        save_snippet_in(&base, &path, None, ":x".into(), "{{date}} — {{clipboard}}".into(), None, None)
             .unwrap();
         let doc = read_doc(&path).unwrap();
         let Some(Value::Sequence(vars)) = doc.matches[0].extra.get("vars") else {
@@ -1412,7 +1512,7 @@ mod tests {
         assert!(!is_advanced(&doc.matches[0]), "bleibt editierbar");
 
         // Platzhalter entfernen → vars verschwinden wieder (kein Leichenblock).
-        save_snippet(p.clone(), Some(0), ":x".into(), "nur Text".into(), None, Some(":x".into()))
+        save_snippet_in(&base, &path, Some(0), ":x".into(), "nur Text".into(), None, Some(":x".into()))
             .unwrap();
         let doc = read_doc(&path).unwrap();
         assert!(!doc.matches[0].extra.contains_key("vars"), "vars müssen weg sein");
@@ -1434,8 +1534,9 @@ mod tests {
         )
         .unwrap();
 
-        save_snippet(
-            path.display().to_string(),
+        save_snippet_in(
+            &std::env::temp_dir(),
+            &path,
             Some(0),
             ":d".into(),
             "Heute: {{date}}".into(),
@@ -1484,6 +1585,64 @@ mod tests {
         assert_eq!(safe_file_stem(" meine snippets ").unwrap(), "meine-snippets");
         assert_eq!(safe_file_stem("../../etc/passwd").unwrap(), "------etc-passwd");
         assert!(safe_file_stem("   ").is_err());
+    }
+
+    #[test]
+    fn inner_snippet_ops_reject_paths_outside_base() {
+        // BEFUND 2 (CWE-22): save/delete dürfen nur INNERHALB der base schreiben.
+        let base = std::env::temp_dir().join("snippetaffairs_inner_base");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+
+        // Angriffsziel AUSSERHALB der base, mit bekanntem Inhalt.
+        let target = std::env::temp_dir().join("snippetaffairs_inner_outside.yml");
+        std::fs::write(&target, "matches: []\n").unwrap();
+        let before = std::fs::read_to_string(&target).unwrap();
+
+        // 1) Direkter Fremdpfad wird abgelehnt.
+        let res = save_snippet_in(&base, &target, None, ":x".into(), "böse".into(), None, None);
+        assert!(res.unwrap_err().starts_with("ECB:AI-1955-INPUT|"));
+
+        // 2) ..-Traversal aus der base heraus auf dasselbe Ziel wird abgelehnt.
+        let traversal = base.join("../snippetaffairs_inner_outside.yml");
+        let res =
+            save_snippet_in(&base, &traversal, None, ":x".into(), "böse".into(), None, None);
+        assert!(res.unwrap_err().starts_with("ECB:AI-1955-INPUT|"));
+
+        // 3) delete lehnt den Fremdpfad ebenso ab.
+        let del = delete_snippet_in(&base, &target, 0, None);
+        assert!(del.unwrap_err().starts_with("ECB:AI-1955-INPUT|"));
+
+        // Die Zieldatei bleibt unverändert — es wurde nichts geschrieben.
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), before);
+
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // ---- Eingabevalidierung vor CLI-Aufrufen (CWE-78) -----------------------
+
+    #[test]
+    fn package_name_rejects_shell_metacharacters() {
+        for bad in ["all&calc", "a|b", "foo bar", "x>y", "a<b", "50%", "q\"r", ""] {
+            let err = validate_package_name(bad).unwrap_err();
+            assert!(err.starts_with("ECB:AI-1955-INPUT|"), "{bad:?} → {err}");
+        }
+        for ok in ["all-emojis", "typofixer_de.v2", "a", "A1.b_c-d"] {
+            assert!(validate_package_name(ok).is_ok(), "{ok:?} müsste akzeptiert werden");
+        }
+    }
+
+    #[test]
+    fn trigger_rejects_shell_metacharacters() {
+        for bad in ["&calc", ":a|b", "x>y", "a\nb", "q\"r", "50%", "a^b", "c<d"] {
+            let err = validate_trigger_chars(bad).unwrap_err();
+            assert!(err.starts_with("ECB:AI-1955-INPUT|"), "{bad:?} → {err}");
+        }
+        // Trigger dürfen legitim Sonderzeichen tragen.
+        for ok in [":hi!", ":date?", "#tag", "a:b", ":gruß"] {
+            assert!(validate_trigger_chars(ok).is_ok(), "{ok:?} müsste erlaubt sein");
+        }
     }
 
     // ---- Trigger-Kollisionen ------------------------------------------------

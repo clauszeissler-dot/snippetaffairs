@@ -94,12 +94,35 @@ Für die ungemessenen Befehle gilt `cli_failed()`: es prüft `success` **und** d
 Bei jedem neuen CLI-Aufruf **einmal mit falschem Argument ausprobieren** und den Exit-Code
 notieren, statt ihn anzunehmen. Die Tabelle oben ist so entstanden.
 
+## 4a. Kein `cmd /C`, keine Shell — jedes CLI-Argument wird validiert
+
+Die Engine-CLI wird **immer direkt** gespawnt (`Command::new(bin)`), auch unter Windows für
+`.bat`/`.cmd`-Shims. **Nie `cmd /C`** davorsetzen: Rusts Batch-Argument-Escaping (Fix für
+CVE-2024-24576, vollständig ab Rust 1.81) greift **nur**, wenn das gestartete Programm SELBST
+die `.bat`/`.cmd`-Datei ist. Bei `cmd /C <shim> <args>` ist das Programm cmd.exe — Metazeichen
+(`& | ^ > < " %`) in den Argumenten blieben ungeschützt und würden von cmd.exe interpretiert
+(**Command Injection, CWE-78**). Deshalb steht die MSRV in `Cargo.toml` auf `rust-version = "1.81"`,
+damit ältere Toolchains ohne dieses Escaping nicht still unsicher bauen.
+
+Zweite Schicht: **jedes** an die CLI gereichte Argument aus fremder Quelle wird **vor** dem
+Aufruf validiert (`espanso.rs`):
+
+- **Paketnamen** (`package_install`/`package_uninstall`/`package_update`) → `validate_package_name`,
+  erlaubt nur `[A-Za-z0-9._-]`. Quelle: espanso-Hub (GitHub-Pfad).
+- **Trigger** (`match_exec`) → `validate_trigger_chars`, lehnt `& | ^ > < " %`, `\r`, `\n` ab.
+  Bewusst **keine** Whitelist — Trigger dürfen legitim `: ! ? #` tragen. Quelle: fremde YAML-Dateien.
+
+Jeden neuen CLI-Aufruf mit Argumenten aus fremder Quelle genauso absichern.
+
 ## 5. Destruktive Datei-Operationen liegen hinter `ensure_within`
 
-`delete_match_file`, `rename_match_file`, `restore_backup` und `list_backups` prüfen über
-`ensure_within(path, match_dir())`, dass der Pfad wirklich im match-Ordner liegt (kanonisiert,
-Symlinks aufgelöst). Neue Datei-Operationen genauso absichern — auch wenn der Pfad „ja aus
-unserer eigenen UI kommt".
+`delete_match_file`, `rename_match_file`, `restore_backup`, `list_backups` **sowie die
+schreibenden `save_snippet`/`delete_snippet`** prüfen über `ensure_within(path, match_dir())`,
+dass der Pfad wirklich im match-Ordner liegt (kanonisiert, Symlinks aufgelöst). Bei
+`save_snippet`/`delete_snippet` liegt die Prüfung in den inneren Funktionen `save_snippet_in`/
+`delete_snippet_in` (der Command ermittelt `match_dir()` und delegiert; die Tests übergeben
+einen Temp-Ordner als Basis — kein `#[cfg(test)]`-Sonderweg im Produktivcode). Neue
+Datei-Operationen genauso absichern — auch wenn der Pfad „ja aus unserer eigenen UI kommt".
 
 ## 6. Einfache Variablen vs. Handarbeit
 
@@ -140,3 +163,36 @@ Jede Zeile dort steht, weil sie in diesem Repo schon einmal einen echten Fehler 
 Zwei bewusste ESLint-Ausnahmen (`react-hooks/set-state-in-effect` in `App.tsx` und
 `Diagnostics.tsx`): die Regel durchdringt die `async`-Grenze nicht — dort wird State erst
 nach `await` gesetzt, nicht synchron im Effekt.
+
+## 10. Content Security Policy (CSP) ist eng — nicht heimlich aufweichen
+
+`app.security.csp` in `src-tauri/tauri.conf.json` ist bewusst restriktiv. Sie erlaubt **nur
+das, was im Code nachweislich gebraucht wird**. Wer einen neuen `fetch`, eine neue externe
+Ressource (Font, Bild, Skript, WebSocket) einbaut, **muss die CSP dort mit erweitern** —
+sonst blockt die App die Anfrage stumm zur Laufzeit (sichtbar nur in der Devtools-Konsole).
+
+Produktions-CSP (`csp`) — jede Direktive mit Grund:
+
+| Direktive | Wert | Warum |
+|---|---|---|
+| `default-src` | `'self'` | restriktiver Fallback für alles Nicht-Aufgeführte |
+| `script-src` | `'self'` | Prod-`index.html` lädt nur ein gebündeltes `src`-Modul; Tauri hängt zur Compile-Zeit Nonce/Hash für sein IPC-Bootstrap-Skript selbst an. **Kein `'unsafe-inline'`** — bewusst. |
+| `style-src` | `'self' 'unsafe-inline'` | React setzt `style={{…}}` zur Laufzeit; `'unsafe-inline'` deckt das defensiv ab. Kein Sicherheitsloch für JS (CSS führt keinen Code aus), da Exfiltration über `connect-src`/`img-src`/`font-src` eng bleibt. |
+| `img-src` | `'self' data:` | nur gebündelte Assets; `data:` als kleine Reserve für inline/gebündelte Kleinbilder. Keine externen Bild-Hosts nötig. |
+| `font-src` | `'self' data:` | **@fontsource ist gebündelt** (`src/main.tsx`). Vite legt große Font-Subsets als `/assets/*.woff2` (`'self'`) ab **und inlined kleine als `data:`** — beides nötig, sonst fehlen Zeichensätze. Kein CDN. |
+| `connect-src` | `'self' ipc: http://ipc.localhost https://api.github.com https://raw.githubusercontent.com` | `ipc:`/`http://ipc.localhost` = Tauri-v2-`invoke` (offizielle Doku). Die beiden GitHub-Hosts sind der espanso-Hub (`src/lib/hub.ts`: Tree-API + raw-CDN). |
+| `object-src` | `'none'` | keine Plugins/`<object>` |
+| `base-uri` | `'self'` | verhindert `<base>`-Injection |
+
+**Externe Links** (arxiv, wikipedia, … aus `errorcodebase-registry.json`) öffnen über
+`@tauri-apps/plugin-opener` im Systembrowser (IPC), **nicht** im WebView — sie brauchen
+darum **keinen** CSP-Host. Wer künftig eine URL im WebView selbst lädt (`<iframe>`, direkte
+Navigation, `fetch`), muss die CSP entsprechend erweitern.
+
+**Dev-CSP (`devCsp`) ist absichtlich lockerer** und gilt nur unter `bun run tauri dev`
+(laut Tauri-Schema greift sonst `csp` auch im Dev). Sie erlaubt zusätzlich
+`'unsafe-inline' 'unsafe-eval'` für Skripte (Vite/React-Refresh injizieren ein Inline-
+Preamble-Skript) und `ws://localhost:*`/`http://localhost:*` für den HMR-WebSocket. Die
+**erlaubte Host-Liste (GitHub-Hub, `ipc:`) ist in beiden identisch** — der Dev-Rauchtest
+prüft also dieselbe Freigabe wie die Produktion. Diese Lockerung **nie** in `csp`
+übernehmen.

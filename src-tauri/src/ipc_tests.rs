@@ -71,16 +71,20 @@ fn tmp(name: &str) -> std::path::PathBuf {
 
 /// Der Kern: die Keys aus api.ts müssen ankommen. Schlägt dieser Test fehl,
 /// ist Snippet-Speichern in der ausgelieferten App kaputt.
+///
+/// Seit dem Pfad-Schutz (BEFUND 2) liegen `save_snippet`/`delete_snippet` hinter
+/// `ensure_within(match_dir())`. Ein Temp-Pfad liegt außerhalb davon (bzw. der
+/// Config-Ordner fehlt in der CI) und wird darum mit einem ECB-Fehler abgewiesen,
+/// NICHT mit „missing required key". Genau das prüft `assert_args_arrive`: käme
+/// der camelCase-Name nicht an, wäre die Meldung „missing required key". Der
+/// Effekt (Datei wird wirklich geschrieben/gelöscht) ist von den Unit-Tests von
+/// `save_snippet_in`/`delete_snippet_in` in `espanso.rs` abgedeckt.
 #[test]
 fn save_snippet_accepts_the_keys_the_frontend_sends() {
-    let path = tmp("save");
-    let _ = std::fs::remove_file(&path);
-    std::fs::write(&path, "matches: []\n").unwrap();
-
-    let res = invoke(
+    assert_args_arrive(
         "save_snippet",
         json!({
-            "filePath": path.display().to_string(),
+            "filePath": tmp("save").display().to_string(),
             "index": null,
             "trigger": ":hi",
             "replace": "Hallo",
@@ -88,60 +92,41 @@ fn save_snippet_accepts_the_keys_the_frontend_sends() {
             "expectedTrigger": null,
         }),
     );
-    assert!(res.is_ok(), "IPC-Aufruf schlug fehl: {res:?}");
-
-    let written = std::fs::read_to_string(&path).unwrap();
-    assert!(written.contains(":hi"), "Snippet wurde nicht geschrieben: {written}");
-
-    let _ = std::fs::remove_file(&path);
-    let _ = std::fs::remove_file(path.with_extension("yml.bak"));
-    let _ = std::fs::remove_file(path.with_extension("yml.orig"));
 }
 
 #[test]
 fn delete_snippet_accepts_the_keys_the_frontend_sends() {
-    let path = tmp("delete");
-    let _ = std::fs::remove_file(&path);
-    std::fs::write(&path, "matches:\n  - trigger: \":weg\"\n    replace: \"x\"\n").unwrap();
-
-    let res = invoke(
+    assert_args_arrive(
         "delete_snippet",
         json!({
-            "filePath": path.display().to_string(),
+            "filePath": tmp("delete").display().to_string(),
             "index": 0,
             "expectedTrigger": ":weg",
         }),
     );
-    assert!(res.is_ok(), "IPC-Aufruf schlug fehl: {res:?}");
-
-    let written = std::fs::read_to_string(&path).unwrap();
-    assert!(!written.contains(":weg"), "Snippet wurde nicht gelöscht");
-
-    let _ = std::fs::remove_file(&path);
-    let _ = std::fs::remove_file(path.with_extension("yml.bak"));
-    let _ = std::fs::remove_file(path.with_extension("yml.orig"));
 }
 
-/// Der Staleness-Guard muss auch über IPC greifen (nicht nur im Unit-Test).
+/// Ein Fremdpfad (außerhalb des match-Ordners) wird auch über die IPC-Naht
+/// abgewiesen, bevor irgendetwas geschrieben wird. Der Staleness-Guard selbst
+/// liegt jetzt HINTER `ensure_within(match_dir())` und wird auf Funktionsebene
+/// geprüft (`stale_index_is_rejected_before_write` in `espanso.rs`), weil im Test
+/// kein echtes `match_dir` bespielt werden kann.
 #[test]
-fn stale_delete_is_rejected_over_ipc() {
+fn foreign_path_delete_is_rejected_over_ipc() {
     let path = tmp("stale");
     let _ = std::fs::remove_file(&path);
     std::fs::write(&path, "matches:\n  - trigger: \":a\"\n    replace: \"x\"\n").unwrap();
 
-    let res = invoke(
+    assert_args_arrive(
         "delete_snippet",
         json!({
             "filePath": path.display().to_string(),
             "index": 0,
-            "expectedTrigger": ":etwas-anderes",
+            "expectedTrigger": ":a",
         }),
     );
-    let err = res.expect_err("veralteter Trigger muss abgelehnt werden");
-    let msg = err.as_str().unwrap_or_default();
-    assert!(msg.starts_with("ECB:AI-2017-CTX|"), "war: {msg}");
 
-    // Datei unverändert
+    // Datei unverändert — es wurde nichts geschrieben.
     assert!(std::fs::read_to_string(&path).unwrap().contains(":a"));
     let _ = std::fs::remove_file(&path);
 }

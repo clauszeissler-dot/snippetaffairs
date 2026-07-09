@@ -46,10 +46,17 @@ Jede Prozess-, Sprach- oder Systemgrenze (Tauri-IPC, CLI-Aufruf, HTTP, Worker, M
 - [ ] Wurde der Befehl **einmal mit falschem Argument ausgeführt** und der Exit-Code notiert?
 - [ ] Steht das Ergebnis in der Tabelle in `AGENTS.md` §4?
 - [ ] Wird bei unzuverlässigem Exit-Code die **Ausgabe** ausgewertet?
+- [ ] Wird die CLI **direkt** gespawnt (kein `cmd /C`) und **jedes** Argument aus fremder Quelle **vor** dem Aufruf validiert?
 
 > Gefunden: `espanso match exec` liefert Exit-Code **0**, auch bei „Worker process is not
 > running". `espanso --version` liefert **1**, obwohl erfolgreich. `install`/`uninstall`/
 > `package update` sind dagegen ehrlich — beides nur durch Messen feststellbar.
+>
+> Gefunden: `espanso_command` baute unter Windows `cmd /C <shim>` — damit greift Rusts
+> Batch-Escaping (Fix für CVE-2024-24576, ab Rust 1.81) NICHT, denn das Programm ist dann
+> cmd.exe. Metazeichen (`& | ^ > < " %`) in Paketnamen (Hub) bzw. Triggern (fremde YAML) wären
+> Command Injection (**CWE-78**). Fix: direkter Spawn (`Command::new(bin)`) + MSRV `1.81` +
+> `validate_package_name`/`validate_trigger_chars` vor jedem CLI-Aufruf.
 
 ## 3. Erfolgsmeldungen — HIGH
 
@@ -83,6 +90,13 @@ Die App schreibt fremde Nutzerdateien.
 
 - [ ] Jede destruktive Datei-Operation hinter `ensure_within(path, match_dir())`?
 - [ ] Kanonisiert (Symlinks aufgelöst), `..`-Traversal getestet?
+- [ ] Auch die **schreibenden** Commands (`save_snippet`, `delete_snippet`) — nicht nur die löschenden/umbenennenden?
+
+> Gefunden: `save_snippet`/`delete_snippet` nahmen `file_path` ungeprüft vom Frontend, während
+> `ensure_within` nur bei rename/delete/list/restore griff. Ein Symlink `match/x.yml → ~/.zshrc`
+> hätte beim Speichern nach außen durchgeschrieben (**CWE-22**, Path Traversal). Fix: Logik in
+> `save_snippet_in`/`delete_snippet_in(base, …)` ausgelagert, beide prüfen `ensure_within` gegen
+> `match_dir()`; die Unit-Tests übergeben ihren Temp-Ordner als Basis.
 
 ## 7. Toter Code — MEDIUM
 
