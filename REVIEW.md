@@ -47,10 +47,15 @@ Jede Prozess-, Sprach- oder Systemgrenze (Tauri-IPC, CLI-Aufruf, HTTP, Worker, M
 - [ ] Steht das Ergebnis in der Tabelle in `AGENTS.md` §4?
 - [ ] Wird bei unzuverlässigem Exit-Code die **Ausgabe** ausgewertet?
 - [ ] Wird die CLI **direkt** gespawnt (kein `cmd /C`) und **jedes** Argument aus fremder Quelle **vor** dem Aufruf validiert?
+- [ ] Arbeitet der Befehl mit einem **Cache**, der veralten kann? Gibt es eine Option, ihn zu umgehen?
 
 > Gefunden: `espanso match exec` liefert Exit-Code **0**, auch bei „Worker process is not
 > running". `espanso --version` liefert **1**, obwohl erfolgreich. `install`/`uninstall`/
 > `package update` sind dagegen ehrlich — beides nur durch Messen feststellbar.
+>
+> Gefunden (im echten Betrieb): `espanso install` nutzt ohne `--refresh-index` einen
+> zwischengespeicherten Hub-Index. Ist der veraltet, scheitert die Installation mit
+> „signature mismatch" — einer Meldung, die die Ursache verschweigt.
 >
 > Gefunden: `espanso_command` baute unter Windows `cmd /C <shim>` — damit greift Rusts
 > Batch-Escaping (Fix für CVE-2024-24576, ab Rust 1.81) NICHT, denn das Programm ist dann

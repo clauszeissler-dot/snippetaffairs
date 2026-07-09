@@ -1234,7 +1234,13 @@ pub fn package_list() -> Result<CmdResult, String> {
 #[tauri::command]
 pub fn package_install(name: String) -> Result<CmdResult, String> {
     validate_package_name(&name)?;
-    run_espanso(&["install", &name])
+    // `--refresh-index` ist Pflicht, nicht Kosmetik: ohne die Option nutzt espanso
+    // seinen zwischengespeicherten Hub-Index. Ist der veraltet, bricht die
+    // Installation mit „unable to install package: signature mismatch" ab —
+    // eine Meldung, aus der kein Nutzer den wahren Grund ableiten kann. Der Index
+    // ist klein, ein Paket installiert man selten. Verifiziert: mit der Option
+    // meldet die CLI „fetching package index...", ohne sie „using cached package index".
+    run_espanso(&["install", "--refresh-index", &name])
 }
 
 #[tauri::command]

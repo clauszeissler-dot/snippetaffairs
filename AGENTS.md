@@ -88,7 +88,7 @@ Verifiziert (espanso 2.3.0):
 | `espanso --version` | **1** — obwohl erfolgreich | nein, stdout parsen |
 | `espanso match exec` | **0** — trotz „Worker process is not running" | nein, Ausgabe prüfen (`cli_failed`) |
 | `espanso service check` | 0 — Zustand nur im Klartext | nein, Text auswerten |
-| `espanso install` | 2 | **ja** |
+| `espanso install` | 2 | **ja** — aber `--refresh-index` nötig, sonst „signature mismatch" bei veraltetem Cache |
 | `espanso uninstall` | 3 | **ja** |
 | `espanso package update` | 5 | **ja** |
 | `espanso stop` (läuft nicht) | 4 | **ja** |
