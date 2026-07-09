@@ -111,18 +111,22 @@ Der Code steht unter CC BY 4.0, das Logo (`src/components/Logo.tsx`, `src-tauri/
 die Namen „KI AffAIrs" / „SnippetAffAIrs" nicht — siehe LICENSE. Das Monogramm ist 1:1 aus dem
 offiziellen Logopaket übernommen, nicht nachgezeichnet. Es wird nie generiert oder verändert.
 
-## 9. Tests und Linter
+## 9. Definition of Done
 
 ```bash
-bun run lint                                        # ESLint (0 Fehler)
-bun run test                                        # 28 Tests: Fehler-Resolver, Hub-Parser, cmpVersion
-bun run build                                       # tsc + vite
-cd src-tauri && cargo clippy --all-targets -- -D warnings
-cd src-tauri && cargo test                          # 24 Tests: Datenintegrität, Pfad-Schutz, IPC-Naht
+bun run verify    # ESLint · Vitest · tsc+vite · Clippy -D warnings · cargo test · Versionsabgleich
 ```
 
-Alle fünf laufen in der CI (`.github/workflows/test.yml`) und müssen grün sein, bevor ein
-Release getaggt wird. Clippy läuft dort mit `-D warnings`.
+Eine Kette, ein Befehl. Sie läuft an drei Stellen, damit sie nicht vom Gedächtnis abhängt:
+
+1. **lokal vor jedem Push** — `.githooks/pre-push` (aktivieren mit
+   `git config core.hooksPath .githooks`; Notausgang: `git push --no-verify`),
+2. **in der CI** bei jedem Push und PR (`.github/workflows/test.yml`, ubuntu + macOS),
+3. **von Hand** vor einem Release-Tag.
+
+Der Verifier-Durchgang für alles, was kein Linter sieht — Nähte, Exit-Codes, Parser,
+Datenverlust, toter Code — steht in **`REVIEW.md`** und wird mit `/pruefen` ausgelöst.
+Jede Zeile dort steht, weil sie in diesem Repo schon einmal einen echten Fehler gefunden hat.
 
 Zwei bewusste ESLint-Ausnahmen (`react-hooks/set-state-in-effect` in `App.tsx` und
 `Diagnostics.tsx`): die Regel durchdringt die `async`-Grenze nicht — dort wird State erst

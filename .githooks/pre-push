@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Verhindert rote CI: fährt lokal dieselbe Kette. Umgehen im Notfall: git push --no-verify
+exec scripts/check.sh
