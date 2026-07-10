@@ -1,6 +1,8 @@
+<!-- ki-affairs-banner:start -->
 <p align="center">
-  <img src="assets/banner.png" alt="SnippetAffAIrs — KI AffAIrs" width="100%">
+  <img src=".github/ki-affairs-banner.png" alt="KI AffAIrs — Sicherheit. Vertrauen. Nutzen." width="100%">
 </p>
+<!-- ki-affairs-banner:end -->
 
 <h1 align="center">SnippetAffAIrs</h1>
 
